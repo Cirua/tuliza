@@ -139,6 +139,7 @@ async function loadConversationHistory(context, limit = 100) {
         text: parsed.text,
         timestamp: row.sent_at ? toIsoString(row.sent_at) : null,
         fromRole,
+        threadStudentId: row.student_id != null ? String(row.student_id) : null,
       }
     })
   )

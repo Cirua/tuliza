@@ -192,6 +192,8 @@ function setupWebSocket(server, { isAllowedOrigin }) {
         fromRoleLabel: roleLabel(ws.userContext.role),
         toRoleLabel: roleLabel(ws.userContext.peerRole),
         toUserId: String(ws.userContext.peerUserId),
+        threadStudentId:
+          ws.userContext.role === 'student' ? String(ws.userContext.userId) : String(ws.userContext.peerUserId),
       }
 
       deliverToUser(ws.userContext.role, ws.userContext.userId, outboundMessage)

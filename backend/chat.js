@@ -3,29 +3,57 @@
 
 (function () {
   const WS_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/server`;
+  const params = new URLSearchParams(window.location.search);
 
-  // Elements
-  const chatRoot = document.getElementById('tuliza-chat');
-  if (!chatRoot) return;
+  const studentPanel = document.getElementById('chat-student-panel');
+  const staffPanel = document.getElementById('chat-staff-panel');
+  if (!studentPanel && !staffPanel) return;
 
-  const header = chatRoot.querySelector('#chat-header');
-  const messagesEl = chatRoot.querySelector('#chat-messages');
-  const inputForm = chatRoot.querySelector('#chat-input-form');
-  const input = chatRoot.querySelector('#chat-input');
-  const clearBtn = chatRoot.querySelector('#chat-clear');
+  const nameInput = document.getElementById('chat-username');
+  const joinModal = document.getElementById('chat-join-modal');
+  const joinForm = document.getElementById('chat-join-form');
 
-  const nameInput = chatRoot.querySelector('#chat-username');
+  function isStaffRole(role) {
+    return role === 'mentor' || role === 'psychiatrist';
+  }
 
-  const joinModal = chatRoot.querySelector('#chat-join-modal');
-  const joinForm = chatRoot.querySelector('#chat-join-form');
+  let sessionUser = null;
+  try {
+    sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+  } catch (_) {
+    sessionUser = null;
+  }
+
+  const roleHintFromSession = sessionUser?.role || params.get('role') || null;
+  const useStaffPanel = isStaffRole(roleHintFromSession) && Boolean(staffPanel);
+
+  if (studentPanel) studentPanel.hidden = useStaffPanel;
+  if (staffPanel) staffPanel.hidden = !useStaffPanel;
+
+  const activePanel = useStaffPanel ? staffPanel : studentPanel;
+  const header = activePanel?.querySelector('[data-chat-header]');
+  const messagesEl = activePanel?.querySelector('[data-chat-messages]');
+  const inputForm = activePanel?.querySelector('[data-chat-input-form]');
+  const input = activePanel?.querySelector('[data-chat-input]');
+  const clearBtn = activePanel?.querySelector('[data-chat-clear]');
+  const threadPanel = activePanel?.querySelector('[data-chat-thread-panel]') || null;
+  const threadList = activePanel?.querySelector('[data-chat-thread-list]') || null;
+  const threadHelp = activePanel?.querySelector('[data-chat-thread-help]') || null;
+
+  if (!header || !messagesEl || !inputForm || !input || !clearBtn || !nameInput || !joinModal || !joinForm) return;
 
   // State
   let ws;
   let myRole = null;
   let myUserId = null;
   let myDisplayName = null;
+  let activePeerUserId = null;
+  let activePeerRole = null;
+  let loadedThreadList = false;
   let pendingJoinPayload = null;
-  const seenMessageIds = new Set();
+  let seenMessageIds = new Set();
+  const unreadByStudent = new Map();
+  let assignedThreads = [];
 
   // Helpers
   function roleLabel(role) {
@@ -33,6 +61,201 @@
     if (role === 'mentor') return 'Mentor';
     if (role === 'psychiatrist') return 'Psychiatrist';
     return role || '';
+  }
+
+  function isMentorOrPsychiatrist() {
+    return myRole === 'mentor' || myRole === 'psychiatrist';
+  }
+
+  function peerSubtitle(peerName, peerRole) {
+    if (!peerName) return 'Unassigned';
+    const peerRoleText = peerRole ? roleLabel(peerRole) : '';
+    return `${peerName}${peerRoleText ? ` (${peerRoleText})` : ''}`;
+  }
+
+  function setHeaderText(statusText) {
+    if (!header) return;
+    header.textContent = statusText;
+  }
+
+  function clearChatWindow() {
+    messagesEl.innerHTML = '';
+    seenMessageIds = new Set();
+  }
+
+  function normalizeStudentIdFromMessage(message) {
+    const fromRole = String(message?.fromRole || '');
+    const toRole = String(message?.toRole || '');
+    const sender = message?.sender != null ? String(message.sender) : '';
+    const toUserId = message?.toUserId != null ? String(message.toUserId) : '';
+    const threadStudentId = message?.threadStudentId != null ? String(message.threadStudentId) : '';
+
+    if (threadStudentId) return threadStudentId;
+    if (fromRole === 'student') return sender;
+    if (toRole === 'student' && sender === String(myUserId) && toUserId) return toUserId;
+    return '';
+  }
+
+  function messageBelongsToActiveThread(message) {
+    if (!isMentorOrPsychiatrist()) return true;
+    if (!activePeerUserId) return false;
+
+    const studentId = normalizeStudentIdFromMessage(message);
+    return studentId === String(activePeerUserId);
+  }
+
+  function updateThreadHelpText() {
+    if (!threadHelp) return;
+    if (!assignedThreads.length) {
+      threadHelp.textContent = 'No assigned students yet.';
+      return;
+    }
+    threadHelp.textContent = 'Choose a student to open their chat box.';
+  }
+
+  function renderThreadList() {
+    if (!threadList) return;
+
+    threadList.innerHTML = '';
+    updateThreadHelpText();
+
+    if (!assignedThreads.length) {
+      const empty = document.createElement('p');
+      empty.className = 'chat-thread-empty';
+      empty.textContent = 'No active student conversations.';
+      threadList.appendChild(empty);
+      return;
+    }
+
+    assignedThreads.forEach((thread) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chat-thread-item';
+      button.dataset.studentId = String(thread.studentId);
+      if (String(thread.studentId) === String(activePeerUserId)) {
+        button.classList.add('active');
+      }
+
+      const name = document.createElement('span');
+      name.className = 'chat-thread-name';
+      name.textContent = thread.username;
+
+      const meta = document.createElement('span');
+      meta.className = 'chat-thread-meta';
+      meta.textContent = `Student ID: ${thread.studentId}`;
+
+      const unreadCount = unreadByStudent.get(String(thread.studentId)) || 0;
+      if (unreadCount > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'chat-thread-badge';
+        badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount);
+        button.appendChild(badge);
+      }
+
+      button.appendChild(name);
+      button.appendChild(meta);
+
+      button.addEventListener('click', () => {
+        switchThread(String(thread.studentId), 'student', thread.username);
+      });
+
+      threadList.appendChild(button);
+    });
+  }
+
+  function incrementUnread(studentId) {
+    if (!studentId) return;
+    const key = String(studentId);
+    const next = (unreadByStudent.get(key) || 0) + 1;
+    unreadByStudent.set(key, next);
+    renderThreadList();
+  }
+
+  function clearUnread(studentId) {
+    if (!studentId) return;
+    unreadByStudent.delete(String(studentId));
+    renderThreadList();
+  }
+
+  async function loadAssignedThreads() {
+    if (!isMentorOrPsychiatrist() || !myUserId) return;
+
+    const rolePath = myRole === 'mentor' ? 'mentor' : 'psychiatrist';
+
+    try {
+      const response = await fetch(
+        `/api/questionnaire/assigned-view?role=${encodeURIComponent(rolePath)}&userId=${encodeURIComponent(String(myUserId))}`
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        assignedThreads = [];
+        renderThreadList();
+        return;
+      }
+
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      assignedThreads = rows
+        .map((row) => ({
+          studentId: row?.student_id != null ? String(row.student_id) : '',
+          username: String(row?.username || row?.student_id || '').trim() || 'Student',
+        }))
+        .filter((row) => row.studentId);
+
+      renderThreadList();
+
+      const requestedPeer = params.get('peerId');
+      const requestedExists = requestedPeer && assignedThreads.some((row) => row.studentId === String(requestedPeer));
+
+      if (requestedExists && String(activePeerUserId) !== String(requestedPeer)) {
+        const requested = assignedThreads.find((row) => row.studentId === String(requestedPeer));
+        switchThread(String(requestedPeer), 'student', requested?.username || null);
+        return;
+      }
+
+      if (!activePeerUserId && assignedThreads[0]) {
+        switchThread(String(assignedThreads[0].studentId), 'student', assignedThreads[0].username);
+      }
+    } catch (_) {
+      assignedThreads = [];
+      renderThreadList();
+    }
+  }
+
+  function setThreadPanelVisibility() {
+    if (!threadPanel) return;
+    const showPanel = isMentorOrPsychiatrist();
+    threadPanel.hidden = !showPanel;
+    if (showPanel) renderThreadList();
+  }
+
+  function switchThread(peerUserId, peerRole = 'student', peerName = null) {
+    if (!myUserId) return;
+
+    activePeerUserId = String(peerUserId || '');
+    activePeerRole = peerRole || 'student';
+    clearUnread(activePeerUserId);
+    clearChatWindow();
+
+    const me = myDisplayName || myUserId;
+    const subtitle = peerSubtitle(peerName || activePeerUserId, activePeerRole);
+    setHeaderText(`${me} (${roleLabel(myRole)}) -> ${subtitle}`);
+
+    const joinPayload = {
+      type: 'join',
+      userId: myUserId,
+      authToken: sessionStorage.getItem('tuliza_session_token') || undefined,
+      roleHint: myRole || undefined,
+      peerUserId: activePeerUserId,
+      peerRole: activePeerRole,
+    };
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(joinPayload));
+    } else {
+      pendingJoinPayload = joinPayload;
+    }
+
+    renderThreadList();
   }
 
   function addMessage({ messageId, sender, senderName, text, timestamp, fromRole }) {
@@ -100,15 +323,33 @@
       if (data.type === 'joined') {
         myRole = data.role || null;
         myDisplayName = data.displayName || data.userId;
-        const peerRoleText = data.peerRole ? roleLabel(data.peerRole) : '';
+        activePeerUserId = data.peerUserId ? String(data.peerUserId) : null;
+        activePeerRole = data.peerRole || null;
+
         const peerName = data.peerDisplayName || data.peerUserId || 'Unassigned';
-        header.textContent = `${myDisplayName} (${roleLabel(data.role)}) -> ${peerName}${peerRoleText ? ` (${peerRoleText})` : ''}`;
+        setHeaderText(`${myDisplayName} (${roleLabel(data.role)}) -> ${peerSubtitle(peerName, data.peerRole)}`);
+        setThreadPanelVisibility();
+        clearChatWindow();
+
+        if (isMentorOrPsychiatrist()) {
+          clearUnread(activePeerUserId);
+          if (!loadedThreadList) {
+            loadedThreadList = true;
+            loadAssignedThreads();
+          } else {
+            renderThreadList();
+          }
+        }
         return;
       }
 
       if (data.type === 'history') {
         const history = Array.isArray(data.messages) ? data.messages : [];
-        history.forEach((entry) => addMessage(entry));
+        history.forEach((entry) => {
+          if (messageBelongsToActiveThread(entry)) {
+            addMessage(entry);
+          }
+        });
         return;
       }
 
@@ -123,12 +364,18 @@
       }
 
       // server sends: {sender, text, timestamp, fromRole, toRole}
+      if (!messageBelongsToActiveThread(data)) {
+        incrementUnread(normalizeStudentIdFromMessage(data));
+        return;
+      }
+
+      clearUnread(normalizeStudentIdFromMessage(data));
       addMessage(data);
     };
 
     ws.onclose = (event) => {
       const reason = event && event.reason ? String(event.reason) : 'Connection closed';
-      header.textContent = `Disconnected (${reason})`;
+      setHeaderText(`Disconnected (${reason})`);
       addMessage({
         messageId: `ws-close-${Date.now()}`,
         sender: 'System',
@@ -149,7 +396,7 @@
 
     // Update UI header
     const connectingName = myDisplayName || username;
-    header.textContent = `${connectingName} (connecting...)`;
+    setHeaderText(`${connectingName} (connecting...)`);
 
     // Join to the server
     let storedUser = {};
@@ -165,8 +412,8 @@
       userId: myUserId,
       authToken: sessionStorage.getItem('tuliza_session_token') || undefined,
       roleHint,
-      peerUserId: new URLSearchParams(window.location.search).get('peerId') || undefined,
-      peerRole: new URLSearchParams(window.location.search).get('peerRole') || undefined,
+      peerUserId: params.get('peerId') || undefined,
+      peerRole: params.get('peerRole') || undefined,
     };
 
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -214,21 +461,13 @@
   });
 
   clearBtn.addEventListener('click', () => {
-    messagesEl.innerHTML = '';
+    clearChatWindow();
   });
 
   // Start
   connect();
 
-  // Auto-fill from logged in user when available.
-  let storedUser = null;
-  try {
-    storedUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
-  } catch (_) {
-    storedUser = null;
-  }
-
-  const sessionUserId = storedUser?.userId || new URLSearchParams(window.location.search).get('userId') || '';
+  const sessionUserId = sessionUser?.userId || params.get('userId') || '';
   if (sessionUserId) {
     nameInput.value = sessionUserId;
     joinConversation();

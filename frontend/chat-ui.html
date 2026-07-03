@@ -30,46 +30,79 @@
     <main class="detail-main">
       <h1 style="margin-bottom:12px;">Conversations</h1>
 
-      <section class="detail-card chat-wrap" id="tuliza-chat">
-        <div class="chat-header">
-          <div class="session-row">
-            <div>
-              <div style="font-weight:700;">Chat</div>
-              <div class="chat-sub" id="chat-header">Not connected</div>
+      <section class="detail-card chat-wrap" id="chat-student-panel" hidden>
+        <div class="chat-main" data-chat-main>
+          <div class="chat-header">
+            <div class="session-row">
+              <div>
+                <div style="font-weight:700;">Student Chat</div>
+                <div class="chat-sub" data-chat-header>Not connected</div>
+              </div>
+              <button data-chat-clear class="btn-ghost-modal" type="button">Clear</button>
             </div>
-            <button id="chat-clear" class="btn-ghost-modal" type="button">Clear</button>
           </div>
+
+          <div class="chat-messages" data-chat-messages aria-live="polite"></div>
+
+          <form class="chat-input-row" data-chat-input-form>
+            <input data-chat-input class="chat-input" type="text" required placeholder="Type your message..." />
+            <button class="send-btn" type="submit">Send</button>
+          </form>
         </div>
+      </section>
 
-        <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+      <section class="detail-card chat-wrap chat-staff-wrap" id="chat-staff-panel" hidden>
+        <div class="chat-layout">
+          <aside class="chat-thread-panel" data-chat-thread-panel>
+            <div class="chat-thread-panel-head">
+              <h2>Students</h2>
+              <p data-chat-thread-help class="chat-thread-help">Choose a student to open their chat box.</p>
+            </div>
+            <div data-chat-thread-list class="chat-thread-list" aria-label="Student conversations"></div>
+          </aside>
 
-        <form class="chat-input-row" id="chat-input-form">
-          <input id="chat-input" class="chat-input" type="text" required placeholder="Type your message..." />
-          <button class="send-btn" type="submit">Send</button>
-        </form>
-
-        <!-- Join modal -->
-        <div class="modal-overlay" id="chat-join-modal" style="display:none;">
-          <div class="modal" style="max-width:520px;">
-            <div class="modal-header">
-              <div class="modal-eyebrow">Student ↔ Mentor/Psychiatrist</div>
-              <h2 class="modal-title">Join conversation</h2>
-              <p class="modal-subtitle">Enter your user ID. Role and recipient are resolved automatically.</p>
+          <div class="chat-main" data-chat-main>
+            <div class="chat-header">
+              <div class="session-row">
+                <div>
+                  <div style="font-weight:700;">Staff Chat</div>
+                  <div class="chat-sub" data-chat-header>Not connected</div>
+                </div>
+                <button data-chat-clear class="btn-ghost-modal" type="button">Clear</button>
+              </div>
             </div>
 
-            <form id="chat-join-form" class="auth-card" style="box-shadow:none; border:none;">
-              <div class="form-group">
-                <label class="form-label" for="chat-username">Your user ID</label>
-                <input id="chat-username" class="form-input" type="text" required placeholder="e.g., STU-001" />
-              </div>
+            <div class="chat-messages" data-chat-messages aria-live="polite"></div>
 
-              <div class="modal-actions">
-                <button type="submit" class="btn-primary">Join</button>
-              </div>
+            <form class="chat-input-row" data-chat-input-form>
+              <input data-chat-input class="chat-input" type="text" required placeholder="Type your message..." />
+              <button class="send-btn" type="submit">Send</button>
             </form>
           </div>
         </div>
       </section>
+
+      <!-- Join modal -->
+      <div class="modal-overlay" id="chat-join-modal" style="display:none;">
+        <div class="modal" style="max-width:520px;">
+          <div class="modal-header">
+            <div class="modal-eyebrow">Student ↔ Mentor/Psychiatrist</div>
+            <h2 class="modal-title">Join conversation</h2>
+            <p class="modal-subtitle">Enter your user ID. Role and recipient are resolved automatically.</p>
+          </div>
+
+          <form id="chat-join-form" class="auth-card" style="box-shadow:none; border:none;">
+            <div class="form-group">
+              <label class="form-label" for="chat-username">Your user ID</label>
+              <input id="chat-username" class="form-input" type="text" required placeholder="e.g., STU-001" />
+            </div>
+
+            <div class="modal-actions">
+              <button type="submit" class="btn-primary">Join</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </main>
   </div>
 
