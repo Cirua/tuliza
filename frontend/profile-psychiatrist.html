@@ -1,24 +1,105 @@
 <!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Tuliza - Psychiatrist Profile</title><link rel="stylesheet" href="styles.css" /></head>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tuliza - Psychiatrist Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
 <body>
-  <main class="auth-main fade-up"><section class="auth-hero-card"><span class="match-eyebrow">Psychiatrist profile</span><h1>Complete your psychiatrist profile</h1></section>
-    <section class="auth-card" style="margin-top:20px;"><form id="profile-form">
-      <div class="form-group"><label class="form-label" for="fullName">Full name</label><input id="fullName" class="form-input" required /></div>
-      <div class="form-group"><label class="form-label" for="phoneNo">Phone number</label><input id="phoneNo" class="form-input" type="number" /></div>
-      <div class="form-group"><label class="form-label" for="certification">Certification</label><input id="certification" class="form-input" /></div>
-      <div class="form-group"><label class="form-label" for="licenceNumber">Licence number</label><input id="licenceNumber" class="form-input" type="text" /></div>
-      <div class="form-group"><label class="form-label" for="yearsOfExperience">Years of experience</label><input id="yearsOfExperience" class="form-input" type="number" /></div>
-      <div class="form-group"><label class="form-label" for="billingDetails">Billing details</label><input id="billingDetails" class="form-input" /></div>
-      <p id="msg" class="role-help-text"></p><button class="btn-primary" type="submit">Save profile</button>
-    </form></section></main>
+  <nav class="navbar" aria-label="Main navigation">
+    <a class="logo" href="/psychologist.html">
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1C4.7 1 2 3.7 2 7c0 2.1 1.1 4 2.7 5.1L8 15l3.3-2.9C12.9 11 14 9.1 14 7c0-3.3-2.7-6-6-6zm0 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+        </svg>
+      </div>
+      <span class="logo-text">Tuliz<span class="accent-letter">a</span></span>
+    </a>
+    <div class="nav-tabs" role="navigation" aria-label="Section links">
+      <a class="nav-tab" href="/psychologist.html">Dashboard</a>
+      <a class="nav-tab" href="/chat-ui.html">Chat</a>
+      <a class="nav-tab active" href="/profile-psychiatrist.html" aria-current="page">Profile</a>
+      <button class="nav-tab" id="logout-btn" type="button">Logout</button>
+    </div>
+  </nav>
+
+  <main class="auth-main fade-up">
+    <section class="auth-hero-card">
+      <span class="match-eyebrow">Psychiatrist profile</span>
+      <h1>Complete your psychiatrist profile</h1>
+    </section>
+    <section class="auth-card" style="margin-top:20px;">
+      <form id="profile-form">
+        <div class="form-group"><label class="form-label" for="fullName">Full name</label><input id="fullName" class="form-input" required /></div>
+        <div class="form-group"><label class="form-label" for="phoneNo">Phone number</label><input id="phoneNo" class="form-input" type="number" /></div>
+        <div class="form-group"><label class="form-label" for="certification">Certification</label><input id="certification" class="form-input" /></div>
+        <div class="form-group"><label class="form-label" for="licenceNumber">Licence number</label><input id="licenceNumber" class="form-input" type="text" /></div>
+        <div class="form-group"><label class="form-label" for="yearsOfExperience">Years of experience</label><input id="yearsOfExperience" class="form-input" type="number" /></div>
+        <div class="form-group"><label class="form-label" for="billingDetails">Billing details</label><input id="billingDetails" class="form-input" /></div>
+        <p id="msg" class="role-help-text"></p>
+        <div class="modal-actions" style="margin-top:12px;">
+          <button class="btn-primary" type="submit">Save profile</button>
+          <button id="delete-profile-btn" class="btn-ghost-modal" type="button">Delete profile</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
   <script>
     const form = document.getElementById('profile-form');
     const msg = document.getElementById('msg');
+    const deleteBtn = document.getElementById('delete-profile-btn');
+    const logoutBtn = document.getElementById('logout-btn');
     const sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
     if (!sessionUser || sessionUser.role !== 'psychiatrist' || !sessionUser.signupId) window.location.href = 'account.html';
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('tuliza_session_token');
+        sessionStorage.removeItem('tuliza_session_user');
+        window.location.href = '/account.html';
+      });
+    }
+
+    function setMessage(text, isError) {
+      msg.textContent = text || '';
+      msg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function applyProfileValues(profile) {
+      if (!profile) return;
+      document.getElementById('fullName').value = profile.fullName || '';
+      document.getElementById('phoneNo').value = profile.phoneNo || '';
+      document.getElementById('certification').value = profile.certification || '';
+      document.getElementById('licenceNumber').value = profile.licenceNumber || '';
+      document.getElementById('yearsOfExperience').value = profile.yearsOfExperience || '';
+      document.getElementById('billingDetails').value = profile.billingDetails || '';
+    }
+
+    async function loadExistingProfile() {
+      try {
+        const response = await fetch(`/api/profile?role=psychiatrist&signupId=${encodeURIComponent(String(sessionUser.signupId))}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setMessage(data.error || 'Failed to load profile', true);
+          return;
+        }
+
+        if (data.exists && data.profile) {
+          applyProfileValues(data.profile);
+        }
+      } catch (_) {
+        setMessage('Could not reach server.', true);
+      }
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      setMessage('', false);
       const payload = {
         role: 'psychiatrist',
         signupId: sessionUser.signupId,
@@ -31,13 +112,43 @@
       };
       const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { msg.textContent = data.error || 'Failed to save profile'; return; }
+      if (!res.ok) {
+        setMessage(data.error || 'Failed to save profile', true);
+        return;
+      }
       if (data.sessionToken) {
         sessionStorage.setItem('tuliza_session_token', data.sessionToken);
       }
       sessionStorage.setItem('tuliza_session_user', JSON.stringify({ ...sessionUser, userId: data.userId, role: data.role, signupId: data.signupId }));
       window.location.href = data.redirectTo || 'psychologist.html';
     });
+
+    deleteBtn.addEventListener('click', async () => {
+      const confirmed = window.confirm('Delete your psychiatrist profile and account? This cannot be undone.');
+      if (!confirmed) return;
+
+      setMessage('', false);
+      try {
+        const response = await fetch('/api/profile', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role: 'psychiatrist', signupId: sessionUser.signupId }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setMessage(data.error || 'Failed to delete profile', true);
+          return;
+        }
+
+        sessionStorage.removeItem('tuliza_session_token');
+        sessionStorage.removeItem('tuliza_session_user');
+        window.location.href = 'account.html';
+      } catch (_) {
+        setMessage('Could not reach server.', true);
+      }
+    });
+
+    loadExistingProfile();
   </script>
 </body>
 </html>

@@ -11,7 +11,7 @@
 </head>
 <body>
   <nav class="navbar" aria-label="Main navigation">
-    <a class="logo" href="/student.html">
+    <a class="logo" href="/admin.html">
       <div class="logo-mark" aria-hidden="true">
         <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
           <path d="M8 1C4.7 1 2 3.7 2 7c0 2.1 1.1 4 2.7 5.1L8 15l3.3-2.9C12.9 11 14 9.1 14 7c0-3.3-2.7-6-6-6zm0 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
@@ -19,12 +19,9 @@
       </div>
       <span class="logo-text">Tuliz<span class="accent-letter">a</span></span>
     </a>
-    <div class="nav-tabs" role="navigation" aria-label="Role pages">
-      <a class="nav-tab" href="/student.html">Student</a>
-      <a class="nav-tab" href="/mentor.html">Mentor</a>
-      <a class="nav-tab" href="/psychologist.html">Psychologist</a>
+    <div class="nav-tabs" role="navigation" aria-label="Admin pages">
       <a class="nav-tab active" href="/admin.html" aria-current="page">Admin</a>
-      <a class="nav-tab" href="/account.html">Account</a>
+      <button id="logout-btn" class="nav-tab" type="button">Logout</button>
     </div>
   </nav>
 
@@ -32,109 +29,463 @@
     <section class="role-hero">
       <div>
         <p class="role-eyebrow">Platform operations</p>
-        <h1>Oversee system health and quality</h1>
-        <p class="subtitle">Monitor user growth, appointment throughput, response quality, and moderation workflows.</p>
-      </div>
-      <div class="role-actions">
-        <button class="btn-primary" type="button">Create report</button>
-        <button class="btn-ghost-modal" type="button">Manage roles</button>
+        <h1>Database operations dashboard</h1>
+        <p class="subtitle">View users and assignments, then manage resources and emergency contacts directly.</p>
       </div>
     </section>
 
     <section class="role-kpi-grid fade-up fade-up-delay-1" aria-label="Admin metrics">
       <article class="role-kpi-card">
         <p class="role-kpi-label">Total students</p>
-        <p class="role-kpi-value">1,248</p>
-        <p class="role-kpi-meta">+62 this month</p>
+        <p id="kpi-students" class="role-kpi-value">-</p>
+        <p class="role-kpi-meta">From signup + student tables</p>
       </article>
       <article class="role-kpi-card">
         <p class="role-kpi-label">Mentors active</p>
-        <p class="role-kpi-value">37</p>
-        <p class="role-kpi-meta">31 online now</p>
+        <p id="kpi-mentors" class="role-kpi-value">-</p>
+        <p class="role-kpi-meta">Current mentor profiles</p>
       </article>
       <article class="role-kpi-card">
-        <p class="role-kpi-label">Psychologists active</p>
-        <p class="role-kpi-value">14</p>
-        <p class="role-kpi-meta">12 available today</p>
+        <p class="role-kpi-label">Psychiatrists active</p>
+        <p id="kpi-psychiatrists" class="role-kpi-value">-</p>
+        <p class="role-kpi-meta">Current psychiatrist profiles</p>
       </article>
       <article class="role-kpi-card">
-        <p class="role-kpi-label">Open incidents</p>
-        <p class="role-kpi-value">3</p>
-        <p class="role-kpi-meta">2 high priority</p>
+        <p class="role-kpi-label">Assignments</p>
+        <p id="kpi-assignments" class="role-kpi-value">-</p>
+        <p class="role-kpi-meta">Rows in assignments table</p>
       </article>
     </section>
 
-    <section class="role-layout fade-up fade-up-delay-2">
+    <section class="role-layout fade-up fade-up-delay-2" style="grid-template-columns: 1fr;">
       <article class="role-panel">
         <div class="role-panel-head">
-          <h2>Operational snapshot</h2>
-          <button class="btn-ghost-modal" type="button">Download CSV</button>
+          <h2>Users</h2>
         </div>
         <div class="role-table-wrap">
-          <table class="role-table" aria-label="Operational snapshot table">
+          <table class="role-table" aria-label="Users table">
             <thead>
               <tr>
-                <th>Metric</th>
-                <th>Today</th>
-                <th>7-day avg</th>
-                <th>Trend</th>
-                <th>Owner</th>
+                <th>Signup ID</th>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Email</th>
+                <th>Created</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td>New signups</td>
-                <td>42</td>
-                <td>35</td>
-                <td><span class="role-pill">Up</span></td>
-                <td>Admissions IT</td>
-              </tr>
-              <tr>
-                <td>Completed sessions</td>
-                <td>118</td>
-                <td>102</td>
-                <td><span class="role-pill">Up</span></td>
-                <td>Clinical Ops</td>
-              </tr>
-              <tr>
-                <td>No-show appointments</td>
-                <td>9</td>
-                <td>13</td>
-                <td><span class="role-pill warning">Improving</span></td>
-                <td>Support Team</td>
-              </tr>
-              <tr>
-                <td>Escalated cases</td>
-                <td>4</td>
-                <td>2</td>
-                <td><span class="role-pill high">Watch</span></td>
-                <td>Duty Psychologist</td>
-              </tr>
-            </tbody>
+            <tbody id="users-body"></tbody>
           </table>
         </div>
       </article>
 
-      <aside class="role-stack">
-        <article class="role-panel">
-          <h3>Moderation queue</h3>
-          <ul class="role-list">
-            <li>2 reports of abusive language in peer chat</li>
-            <li>1 account pending identity verification</li>
-            <li>3 stale mentor profiles missing updates</li>
-          </ul>
-        </article>
-        <article class="role-panel">
-          <h3>Broadcast notice</h3>
-          <textarea class="form-textarea" placeholder="Write a platform notice for all users..."></textarea>
-          <button class="btn-primary" type="button" style="margin-top:12px;">Publish update</button>
-        </article>
-      </aside>
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Assignments</h2>
+        </div>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Assignments table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Student</th>
+                <th>Mentor</th>
+                <th>Psychiatrist</th>
+              </tr>
+            </thead>
+            <tbody id="assignments-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Resources</h2>
+        </div>
+        <form id="resource-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
+          <input id="resource-id" type="hidden" />
+          <div class="form-group"><label class="form-label" for="resource-title">Title</label><input id="resource-title" class="form-input" required /></div>
+          <div class="form-group"><label class="form-label" for="resource-category">Category</label><input id="resource-category" class="form-input" /></div>
+          <div class="form-group"><label class="form-label" for="resource-description">Description</label><textarea id="resource-description" class="form-textarea"></textarea></div>
+          <div class="form-group"><label class="form-label" for="resource-link">File link</label><input id="resource-link" class="form-input" /></div>
+          <div class="modal-actions">
+            <button class="btn-primary" type="submit">Save resource</button>
+            <button id="resource-reset" class="btn-ghost-modal" type="button">Clear</button>
+          </div>
+          <p id="resource-msg" class="role-help-text"></p>
+        </form>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Resources table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Link</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="resources-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Emergency Contacts</h2>
+        </div>
+        <form id="contact-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
+          <input id="contact-id" type="hidden" />
+          <div class="form-group"><label class="form-label" for="contact-name">Contact name</label><input id="contact-name" class="form-input" required /></div>
+          <div class="form-group"><label class="form-label" for="contact-phone">Phone number</label><input id="contact-phone" class="form-input" type="tel" /></div>
+          <div class="modal-actions">
+            <button class="btn-primary" type="submit">Save contact</button>
+            <button id="contact-reset" class="btn-ghost-modal" type="button">Clear</button>
+          </div>
+          <p id="contact-msg" class="role-help-text"></p>
+        </form>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Emergency contacts table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="contacts-body"></tbody>
+          </table>
+        </div>
+      </article>
     </section>
   </main>
 
   <script>
-    (function enforceRoleAccess() {
+    const usersBody = document.getElementById('users-body');
+    const assignmentsBody = document.getElementById('assignments-body');
+    const resourcesBody = document.getElementById('resources-body');
+    const contactsBody = document.getElementById('contacts-body');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    const resourceForm = document.getElementById('resource-form');
+    const resourceIdInput = document.getElementById('resource-id');
+    const resourceTitleInput = document.getElementById('resource-title');
+    const resourceCategoryInput = document.getElementById('resource-category');
+    const resourceDescriptionInput = document.getElementById('resource-description');
+    const resourceLinkInput = document.getElementById('resource-link');
+    const resourceResetBtn = document.getElementById('resource-reset');
+    const resourceMsg = document.getElementById('resource-msg');
+
+    const contactForm = document.getElementById('contact-form');
+    const contactIdInput = document.getElementById('contact-id');
+    const contactNameInput = document.getElementById('contact-name');
+    const contactPhoneInput = document.getElementById('contact-phone');
+    const contactResetBtn = document.getElementById('contact-reset');
+    const contactMsg = document.getElementById('contact-msg');
+
+    const kpiStudents = document.getElementById('kpi-students');
+    const kpiMentors = document.getElementById('kpi-mentors');
+    const kpiPsychiatrists = document.getElementById('kpi-psychiatrists');
+    const kpiAssignments = document.getElementById('kpi-assignments');
+
+    let resourceRows = [];
+    let contactRows = [];
+
+    function safeText(value) {
+      return String(value || '').trim() || '-';
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    async function api(url, options) {
+      const response = await fetch(url, options);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Request failed');
+      }
+      return payload;
+    }
+
+    function setResourceMessage(message, isError) {
+      resourceMsg.textContent = message || '';
+      resourceMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function setContactMessage(message, isError) {
+      contactMsg.textContent = message || '';
+      contactMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function resetResourceForm() {
+      resourceIdInput.value = '';
+      resourceTitleInput.value = '';
+      resourceCategoryInput.value = '';
+      resourceDescriptionInput.value = '';
+      resourceLinkInput.value = '';
+      setResourceMessage('', false);
+    }
+
+    function resetContactForm() {
+      contactIdInput.value = '';
+      contactNameInput.value = '';
+      contactPhoneInput.value = '';
+      setContactMessage('', false);
+    }
+
+    function renderUsers(rows) {
+      usersBody.innerHTML = '';
+      if (!rows.length) {
+        usersBody.innerHTML = '<tr><td colspan="6">No users found.</td></tr>';
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.signupId)}</td>
+          <td>${safeText(row.userId)}</td>
+          <td>${safeText(row.displayName)}</td>
+          <td>${safeText(row.role)}</td>
+          <td>${safeText(row.email)}</td>
+          <td>${safeText(formatDate(row.createdAt))}</td>
+        `;
+        usersBody.appendChild(tr);
+      });
+    }
+
+    function renderAssignments(rows) {
+      assignmentsBody.innerHTML = '';
+      if (!rows.length) {
+        assignmentsBody.innerHTML = '<tr><td colspan="4">No assignments found.</td></tr>';
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.assignmentId)}</td>
+          <td>${safeText(row.studentUsername)} (${safeText(row.studentId)})</td>
+          <td>${safeText(row.mentorName)} (${safeText(row.mentorId)})</td>
+          <td>${safeText(row.psychiatristName)} (${safeText(row.psychiatristId)})</td>
+        `;
+        assignmentsBody.appendChild(tr);
+      });
+    }
+
+    function renderResources() {
+      resourcesBody.innerHTML = '';
+      if (!resourceRows.length) {
+        resourcesBody.innerHTML = '<tr><td colspan="5">No resources found.</td></tr>';
+        return;
+      }
+
+      resourceRows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.resourceId)}</td>
+          <td>${safeText(row.title)}</td>
+          <td>${safeText(row.category)}</td>
+          <td>${row.fileLink ? `<a href="${row.fileLink}" target="_blank" rel="noreferrer">Open</a>` : '-'}</td>
+          <td>
+            <button class="role-mini-btn" type="button" data-resource-edit="${row.resourceId}">Edit</button>
+            <button class="role-mini-btn" type="button" data-resource-delete="${row.resourceId}">Delete</button>
+          </td>
+        `;
+        resourcesBody.appendChild(tr);
+      });
+    }
+
+    function renderContacts() {
+      contactsBody.innerHTML = '';
+      if (!contactRows.length) {
+        contactsBody.innerHTML = '<tr><td colspan="4">No contacts found.</td></tr>';
+        return;
+      }
+
+      contactRows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.contactId)}</td>
+          <td>${safeText(row.contactName)}</td>
+          <td>${safeText(row.phoneNo)}</td>
+          <td>
+            <button class="role-mini-btn" type="button" data-contact-edit="${row.contactId}">Edit</button>
+            <button class="role-mini-btn" type="button" data-contact-delete="${row.contactId}">Delete</button>
+          </td>
+        `;
+        contactsBody.appendChild(tr);
+      });
+    }
+
+    async function loadDashboardData() {
+      const payload = await api('/api/admin/dashboard-data');
+      const users = Array.isArray(payload.users) ? payload.users : [];
+      const assignments = Array.isArray(payload.assignments) ? payload.assignments : [];
+
+      renderUsers(users);
+      renderAssignments(assignments);
+
+      kpiStudents.textContent = String(users.filter((u) => u.role === 'student').length);
+      kpiMentors.textContent = String(users.filter((u) => u.role === 'mentor').length);
+      kpiPsychiatrists.textContent = String(users.filter((u) => u.role === 'psychiatrist').length);
+      kpiAssignments.textContent = String(assignments.length);
+    }
+
+    async function loadResources() {
+      const payload = await api('/api/admin/resources');
+      resourceRows = Array.isArray(payload.rows) ? payload.rows : [];
+      renderResources();
+    }
+
+    async function loadContacts() {
+      const payload = await api('/api/admin/emergency-contacts');
+      contactRows = Array.isArray(payload.rows) ? payload.rows : [];
+      renderContacts();
+    }
+
+    async function refreshAll() {
+      await Promise.all([loadDashboardData(), loadResources(), loadContacts()]);
+    }
+
+    usersBody.addEventListener('click', () => {});
+
+    resourcesBody.addEventListener('click', async (event) => {
+      const editId = event.target.getAttribute('data-resource-edit');
+      const deleteId = event.target.getAttribute('data-resource-delete');
+
+      if (editId) {
+        const row = resourceRows.find((item) => String(item.resourceId) === String(editId));
+        if (!row) return;
+        resourceIdInput.value = String(row.resourceId);
+        resourceTitleInput.value = row.title || '';
+        resourceCategoryInput.value = row.category || '';
+        resourceDescriptionInput.value = row.description || '';
+        resourceLinkInput.value = row.fileLink || '';
+        setResourceMessage('Editing resource #' + row.resourceId, false);
+        return;
+      }
+
+      if (deleteId) {
+        if (!window.confirm('Delete this resource?')) return;
+        try {
+          await api('/api/admin/resources/' + encodeURIComponent(deleteId), { method: 'DELETE' });
+          await loadResources();
+          setResourceMessage('Resource deleted.', false);
+        } catch (err) {
+          setResourceMessage(err.message || 'Failed to delete resource.', true);
+        }
+      }
+    });
+
+    contactsBody.addEventListener('click', async (event) => {
+      const editId = event.target.getAttribute('data-contact-edit');
+      const deleteId = event.target.getAttribute('data-contact-delete');
+
+      if (editId) {
+        const row = contactRows.find((item) => String(item.contactId) === String(editId));
+        if (!row) return;
+        contactIdInput.value = String(row.contactId);
+        contactNameInput.value = row.contactName || '';
+        contactPhoneInput.value = row.phoneNo || '';
+        setContactMessage('Editing contact #' + row.contactId, false);
+        return;
+      }
+
+      if (deleteId) {
+        if (!window.confirm('Delete this emergency contact?')) return;
+        try {
+          await api('/api/admin/emergency-contacts/' + encodeURIComponent(deleteId), { method: 'DELETE' });
+          await loadContacts();
+          setContactMessage('Emergency contact deleted.', false);
+        } catch (err) {
+          setContactMessage(err.message || 'Failed to delete emergency contact.', true);
+        }
+      }
+    });
+
+    resourceForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = {
+        title: resourceTitleInput.value.trim(),
+        category: resourceCategoryInput.value.trim(),
+        description: resourceDescriptionInput.value.trim(),
+        fileLink: resourceLinkInput.value.trim(),
+      };
+
+      const editId = resourceIdInput.value.trim();
+
+      try {
+        if (editId) {
+          await api('/api/admin/resources/' + encodeURIComponent(editId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          setResourceMessage('Resource updated successfully.', false);
+        } else {
+          await api('/api/admin/resources', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          setResourceMessage('Resource created successfully.', false);
+        }
+
+        resetResourceForm();
+        await loadResources();
+      } catch (err) {
+        setResourceMessage(err.message || 'Failed to save resource.', true);
+      }
+    });
+
+    contactForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = {
+        contactName: contactNameInput.value.trim(),
+        phoneNo: contactPhoneInput.value.trim(),
+      };
+
+      const editId = contactIdInput.value.trim();
+
+      try {
+        if (editId) {
+          await api('/api/admin/emergency-contacts/' + encodeURIComponent(editId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          setContactMessage('Emergency contact updated successfully.', false);
+        } else {
+          await api('/api/admin/emergency-contacts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          setContactMessage('Emergency contact created successfully.', false);
+        }
+
+        resetContactForm();
+        await loadContacts();
+      } catch (err) {
+        setContactMessage(err.message || 'Failed to save emergency contact.', true);
+      }
+    });
+
+    resourceResetBtn.addEventListener('click', resetResourceForm);
+    contactResetBtn.addEventListener('click', resetContactForm);
+
+    logoutBtn.addEventListener('click', () => {
+      sessionStorage.removeItem('tuliza_session_token');
+      sessionStorage.removeItem('tuliza_session_user');
+      window.location.href = '/account.html';
+    });
+
+    (async function enforceRoleAccess() {
       let sessionUser = {};
       try {
         sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
@@ -144,6 +495,16 @@
 
       if (String(sessionUser.role || '').toLowerCase() !== 'admin') {
         window.location.href = '/account.html';
+        return;
+      }
+
+      try {
+        await refreshAll();
+      } catch (err) {
+        usersBody.innerHTML = '<tr><td colspan="6">' + safeText(err.message || 'Failed to load users.') + '</td></tr>';
+        assignmentsBody.innerHTML = '<tr><td colspan="4">Could not load assignments.</td></tr>';
+        resourcesBody.innerHTML = '<tr><td colspan="5">Could not load resources.</td></tr>';
+        contactsBody.innerHTML = '<tr><td colspan="4">Could not load emergency contacts.</td></tr>';
       }
     })();
   </script>

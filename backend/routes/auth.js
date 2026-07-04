@@ -41,7 +41,7 @@ function profilePath(role) {
   if (role === 'student') return 'profile-student.html'
   if (role === 'mentor') return 'profile-mentor.html'
   if (role === 'psychiatrist') return 'profile-psychiatrist.html'
-  if (role === 'admin') return 'profile-admin.html'
+  if (role === 'admin') return 'admin.html'
   return 'account.html'
 }
 
@@ -54,6 +54,24 @@ function parsePositiveInt(value) {
   const parsed = Number(value)
   if (!Number.isInteger(parsed) || parsed <= 0) return null
   return parsed
+}
+
+function parseNullablePhone(value) {
+  const raw = String(value == null ? '' : value).trim()
+  if (!raw) return null
+
+  const digits = raw.replace(/\D+/g, '')
+  if (!digits) return null
+
+  const parsed = Number(digits)
+  if (!Number.isFinite(parsed)) return null
+  if (!Number.isInteger(parsed) || parsed <= 0) return null
+  return parsed
+}
+
+async function tableExists(db, tableName) {
+  const result = await db.query('SELECT to_regclass($1) AS reg', [`public.${String(tableName || '').trim()}`])
+  return Boolean(result.rows[0] && result.rows[0].reg)
 }
 
 function normalizeTherapistType(value) {
@@ -149,6 +167,87 @@ async function ensureJournalSchema(dbPool) {
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_journal_student_created ON journal(student_id, created_at DESC)')
 }
 
+async function ensureAdminOpsSchema(dbPool) {
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS resource(
+      resource_id SERIAL PRIMARY KEY,
+      title VARCHAR(200),
+      category VARCHAR(100),
+      description VARCHAR(500),
+      file_link VARCHAR(500),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      student_id INT,
+      CONSTRAINT fk_resource_student
+      FOREIGN KEY (student_id) REFERENCES student(student_id)
+    )
+  `)
+
+  await dbPool.query('ALTER TABLE resource ADD COLUMN IF NOT EXISTS title VARCHAR(200)')
+  await dbPool.query('ALTER TABLE resource ADD COLUMN IF NOT EXISTS category VARCHAR(100)')
+  await dbPool.query('ALTER TABLE resource ADD COLUMN IF NOT EXISTS description VARCHAR(500)')
+  await dbPool.query('ALTER TABLE resource ADD COLUMN IF NOT EXISTS file_link VARCHAR(500)')
+  await dbPool.query('ALTER TABLE resource ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+  await dbPool.query('ALTER TABLE resource ADD COLUMN IF NOT EXISTS student_id INT')
+
+  await dbPool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_schema = 'public'
+          AND table_name = 'resource'
+          AND constraint_name = 'fk_resource_student'
+      ) THEN
+        ALTER TABLE resource
+          ADD CONSTRAINT fk_resource_student
+          FOREIGN KEY (student_id) REFERENCES student(student_id);
+      END IF;
+    END $$;
+  `)
+
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS emergency_contact(
+      contact_id SERIAL PRIMARY KEY,
+      conatct_name VARCHAR(100),
+      phone_no BIGINT,
+      student_id INT,
+      CONSTRAINT fk_contact_student
+      FOREIGN KEY (student_id) REFERENCES student(student_id)
+    )
+  `)
+
+  await dbPool.query('ALTER TABLE emergency_contact ADD COLUMN IF NOT EXISTS conatct_name VARCHAR(100)')
+  await dbPool.query('ALTER TABLE emergency_contact ADD COLUMN IF NOT EXISTS contact_name VARCHAR(100)')
+  await dbPool.query('ALTER TABLE emergency_contact ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+  await dbPool.query('ALTER TABLE emergency_contact ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
+  await dbPool.query('ALTER TABLE emergency_contact ADD COLUMN IF NOT EXISTS student_id INT')
+
+  await dbPool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_schema = 'public'
+          AND table_name = 'emergency_contact'
+          AND constraint_name = 'fk_contact_student'
+      ) THEN
+        ALTER TABLE emergency_contact
+          ADD CONSTRAINT fk_contact_student
+          FOREIGN KEY (student_id) REFERENCES student(student_id);
+      END IF;
+    END $$;
+  `)
+
+  await dbPool.query(`
+    UPDATE emergency_contact
+    SET contact_name = COALESCE(contact_name, conatct_name),
+        conatct_name = COALESCE(conatct_name, contact_name)
+    WHERE contact_name IS NULL OR conatct_name IS NULL
+  `)
+}
+
 function normalizeAnswer(value) {
   return String(value || '')
     .trim()
@@ -232,6 +331,7 @@ async function findLeastLoadedAssignee(dbPool, role) {
       FROM mentor m
       LEFT JOIN assignments a ON a.mentor_id = m.mentor_id
       GROUP BY m.mentor_id
+      HAVING COUNT(a.assignment_id) < 2
       ORDER BY assigned_count ASC, m.mentor_id ASC
       LIMIT 1
       `
@@ -246,6 +346,7 @@ async function findLeastLoadedAssignee(dbPool, role) {
       FROM psychiatrist p
       LEFT JOIN assignments a ON a.psychiatrist_id = p.psychiatrist_id
       GROUP BY p.psychiatrist_id
+      HAVING COUNT(a.assignment_id) < 2
       ORDER BY assigned_count ASC, p.psychiatrist_id ASC
       LIMIT 1
       `
@@ -460,6 +561,80 @@ async function ensureStudentIdAutoIncrement(dbPool) {
   `)
 }
 
+async function ensureMentorIdAutoIncrement(dbPool) {
+  await dbPool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'mentor'
+          AND column_name = 'mentor_id'
+      ) THEN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'mentor'
+            AND column_name = 'mentor_id'
+            AND column_default IS NOT NULL
+        ) THEN
+          IF to_regclass('public.mentor_mentor_id_seq') IS NULL THEN
+            CREATE SEQUENCE public.mentor_mentor_id_seq;
+          END IF;
+
+          PERFORM setval(
+            'public.mentor_mentor_id_seq',
+            COALESCE((SELECT MAX(mentor_id) FROM mentor), 0) + 1,
+            false
+          );
+
+          ALTER TABLE mentor
+            ALTER COLUMN mentor_id SET DEFAULT nextval('public.mentor_mentor_id_seq');
+        END IF;
+      END IF;
+    END $$;
+  `)
+}
+
+async function ensurePsychiatristIdAutoIncrement(dbPool) {
+  await dbPool.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'psychiatrist'
+          AND column_name = 'psychiatrist_id'
+      ) THEN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'psychiatrist'
+            AND column_name = 'psychiatrist_id'
+            AND column_default IS NOT NULL
+        ) THEN
+          IF to_regclass('public.psychiatrist_psychiatrist_id_seq') IS NULL THEN
+            CREATE SEQUENCE public.psychiatrist_psychiatrist_id_seq;
+          END IF;
+
+          PERFORM setval(
+            'public.psychiatrist_psychiatrist_id_seq',
+            COALESCE((SELECT MAX(psychiatrist_id) FROM psychiatrist), 0) + 1,
+            false
+          );
+
+          ALTER TABLE psychiatrist
+            ALTER COLUMN psychiatrist_id SET DEFAULT nextval('public.psychiatrist_psychiatrist_id_seq');
+        END IF;
+      END IF;
+    END $$;
+  `)
+}
+
 async function syncLegacyStudentTableIfPresent(dbPool, studentId) {
   return
 }
@@ -511,6 +686,9 @@ async function ensureRoleProfileRow(dbPool, { role, table, userIdCol, signupId, 
   }
 
   if (role === 'mentor' || role === 'psychiatrist') {
+    if (role === 'mentor') await ensureMentorIdAutoIncrement(dbPool)
+    if (role === 'psychiatrist') await ensurePsychiatristIdAutoIncrement(dbPool)
+
     const fullName = buildDisplayName(email)
     const sql = `
       INSERT INTO ${table} (signup_id, email, full_name)
@@ -1098,7 +1276,34 @@ function setupAuthRoutes(app, dbPool) {
       const decision = computeAssignmentDecision(answers)
       const assigneeRole = decision.assignedRole
 
-      const assigneeId = assigneeRole ? await findLeastLoadedAssignee(dbPool, assigneeRole) : null
+      const existingAssignment = await dbPool.query(
+        `
+        SELECT mentor_id, psychiatrist_id
+        FROM assignments
+        WHERE student_id = $1
+        LIMIT 1
+        `,
+        [resolvedStudentId]
+      )
+
+      const existing = existingAssignment.rows[0] || {}
+      const existingAssigneeId =
+        assigneeRole === 'mentor'
+          ? (existing.mentor_id != null ? Number(existing.mentor_id) : null)
+          : assigneeRole === 'psychiatrist'
+            ? (existing.psychiatrist_id != null ? Number(existing.psychiatrist_id) : null)
+            : null
+
+      const assigneeId = assigneeRole
+        ? (existingAssigneeId != null ? existingAssigneeId : await findLeastLoadedAssignee(dbPool, assigneeRole))
+        : null
+
+      if (assigneeRole && assigneeId == null) {
+        const roleLabel = assigneeRole === 'mentor' ? 'Mentor' : 'Psychiatrist'
+        return res.status(409).json({
+          error: `${roleLabel} assignment limit reached. Maximum 2 students per ${assigneeRole}.`,
+        })
+      }
 
       const mentorId =
         assigneeRole === 'mentor' && assigneeId != null
@@ -1442,14 +1647,15 @@ function setupAuthRoutes(app, dbPool) {
         const safeUsername = String(username || '').trim() || buildStudentUsername(email)
         const safeStudentIdentifier = String(studentId || '').trim() || null
         const safeGender = String(gender || '').trim() || null
-        const safePhoneNo = phoneNo == null || String(phoneNo).trim() === '' ? null : Number(phoneNo)
+        const safePhoneNo = parseNullablePhone(phoneNo)
         const safeModeOfPayment = String(modeOfPayment || '').trim() || null
 
         await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS full_name VARCHAR(100)')
         await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
         await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS student_identifier VARCHAR(50)')
         await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS gender VARCHAR(20)')
-        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS phone_no INT')
+        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+        await dbPool.query('ALTER TABLE student ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
         await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS mode_of_payment VARCHAR(50)')
         await dbPool.query('ALTER TABLE student DROP COLUMN IF EXISTS questionnaire')
 
@@ -1488,13 +1694,15 @@ function setupAuthRoutes(app, dbPool) {
         await syncLegacyStudentTableIfPresent(dbPool, Number(profileUserId))
       } else if (normalizedRole === 'mentor' || normalizedRole === 'psychiatrist') {
         const safeFullName = String(fullName || '').trim() || buildDisplayName(email)
-        const safePhoneNo = phoneNo == null || String(phoneNo).trim() === '' ? null : Number(phoneNo)
+        const safePhoneNo = parseNullablePhone(phoneNo)
 
         if (normalizedRole === 'mentor') {
           const safeBio = String(bio || '').trim() || null
 
+          await ensureMentorIdAutoIncrement(dbPool)
           await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
-          await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS phone_no INT')
+          await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+          await dbPool.query('ALTER TABLE mentor ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
           await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS bio VARCHAR(100)')
           await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS student_id INT')
 
@@ -1522,8 +1730,10 @@ function setupAuthRoutes(app, dbPool) {
             yearsOfExperience == null || String(yearsOfExperience).trim() === '' ? null : Number(yearsOfExperience)
           const safeBillingDetails = String(billingDetails || '').trim() || null
 
+          await ensurePsychiatristIdAutoIncrement(dbPool)
           await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
-          await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS phone_no INT')
+          await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+          await dbPool.query('ALTER TABLE psychiatrist ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
           await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS certification VARCHAR(100)')
           await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS licence_number INT')
           await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS years_of_experience INT')
@@ -1631,6 +1841,331 @@ function setupAuthRoutes(app, dbPool) {
     } catch (err) {
       console.error('Profile save failed:', err.message)
       return res.status(500).json({ error: 'Failed to save profile' })
+    }
+  })
+
+  app.get('/api/profile', async (req, res) => {
+    try {
+      const normalizedRole = sanitizeRole(req.query.role)
+      const parsedSignupId = Number(req.query.signupId)
+
+      if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' })
+      if (!Number.isInteger(parsedSignupId) || parsedSignupId <= 0) {
+        return res.status(400).json({ error: 'Valid signupId is required' })
+      }
+
+      const signupRow = await dbPool.query(
+        `
+        SELECT signup_id, role, role_name
+        FROM signup
+        WHERE signup_id = $1
+        LIMIT 1
+        `,
+        [parsedSignupId]
+      )
+
+      if (!signupRow.rows[0]) return res.status(404).json({ error: 'Signup account not found' })
+
+      const signupRole = sanitizeRole(signupRow.rows[0].role || signupRow.rows[0].role_name)
+      if (signupRole !== normalizedRole) {
+        return res.status(400).json({ error: 'Role does not match signup account' })
+      }
+
+      if (normalizedRole === 'student') {
+        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS full_name VARCHAR(100)')
+        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS student_identifier VARCHAR(50)')
+        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS gender VARCHAR(20)')
+        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS phone_no INT')
+        await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS mode_of_payment VARCHAR(50)')
+
+        const result = await dbPool.query(
+          `
+          SELECT
+            student_id,
+            full_name,
+            username,
+            student_identifier,
+            gender,
+            phone_no,
+            mode_of_payment
+          FROM student
+          WHERE signup_id = $1
+          LIMIT 1
+          `,
+          [parsedSignupId]
+        )
+
+        if (!result.rows[0]) {
+          return res.json({ ok: true, role: normalizedRole, signupId: String(parsedSignupId), exists: false, profile: {} })
+        }
+
+        const row = result.rows[0]
+        return res.json({
+          ok: true,
+          role: normalizedRole,
+          signupId: String(parsedSignupId),
+          userId: String(row.student_id),
+          exists: true,
+          profile: {
+            fullName: row.full_name || '',
+            username: row.username || '',
+            studentId: row.student_identifier || '',
+            gender: row.gender || '',
+            phoneNo: row.phone_no == null ? '' : String(row.phone_no),
+            modeOfPayment: row.mode_of_payment || '',
+          },
+        })
+      }
+
+      if (normalizedRole === 'mentor') {
+        await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS phone_no INT')
+        await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS bio VARCHAR(100)')
+
+        const result = await dbPool.query(
+          `
+          SELECT mentor_id, full_name, phone_no, bio
+          FROM mentor
+          WHERE signup_id = $1
+          LIMIT 1
+          `,
+          [parsedSignupId]
+        )
+
+        if (!result.rows[0]) {
+          return res.json({ ok: true, role: normalizedRole, signupId: String(parsedSignupId), exists: false, profile: {} })
+        }
+
+        const row = result.rows[0]
+        return res.json({
+          ok: true,
+          role: normalizedRole,
+          signupId: String(parsedSignupId),
+          userId: String(row.mentor_id),
+          exists: true,
+          profile: {
+            fullName: row.full_name || '',
+            phoneNo: row.phone_no == null ? '' : String(row.phone_no),
+            bio: row.bio || '',
+          },
+        })
+      }
+
+      if (normalizedRole === 'psychiatrist') {
+        await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS phone_no INT')
+        await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS certification VARCHAR(100)')
+        await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS licence_number INT')
+        await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS years_of_experience INT')
+        await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS billing_details VARCHAR(50)')
+
+        const result = await dbPool.query(
+          `
+          SELECT
+            psychiatrist_id,
+            full_name,
+            phone_no,
+            certification,
+            licence_number,
+            years_of_experience,
+            billing_details
+          FROM psychiatrist
+          WHERE signup_id = $1
+          LIMIT 1
+          `,
+          [parsedSignupId]
+        )
+
+        if (!result.rows[0]) {
+          return res.json({ ok: true, role: normalizedRole, signupId: String(parsedSignupId), exists: false, profile: {} })
+        }
+
+        const row = result.rows[0]
+        return res.json({
+          ok: true,
+          role: normalizedRole,
+          signupId: String(parsedSignupId),
+          userId: String(row.psychiatrist_id),
+          exists: true,
+          profile: {
+            fullName: row.full_name || '',
+            phoneNo: row.phone_no == null ? '' : String(row.phone_no),
+            certification: row.certification || '',
+            licenceNumber: row.licence_number == null ? '' : String(row.licence_number),
+            yearsOfExperience: row.years_of_experience == null ? '' : String(row.years_of_experience),
+            billingDetails: row.billing_details || '',
+          },
+        })
+      }
+
+      if (normalizedRole === 'admin') {
+        await dbPool.query(
+          `
+          CREATE TABLE IF NOT EXISTS admins (
+            admin_id SERIAL PRIMARY KEY,
+            password_hash VARCHAR(255),
+            contact_id INT,
+            resource_id INT,
+            signup_id INT UNIQUE
+          )
+          `
+        )
+
+        const result = await dbPool.query(
+          `
+          SELECT admin_id, contact_id, resource_id
+          FROM admins
+          WHERE signup_id = $1
+          LIMIT 1
+          `,
+          [parsedSignupId]
+        )
+
+        if (!result.rows[0]) {
+          return res.json({ ok: true, role: normalizedRole, signupId: String(parsedSignupId), exists: false, profile: {} })
+        }
+
+        const row = result.rows[0]
+        return res.json({
+          ok: true,
+          role: normalizedRole,
+          signupId: String(parsedSignupId),
+          userId: String(row.admin_id),
+          exists: true,
+          profile: {
+            contactId: row.contact_id == null ? '' : String(row.contact_id),
+            resourceId: row.resource_id == null ? '' : String(row.resource_id),
+          },
+        })
+      }
+
+      return res.status(400).json({ error: 'Role not supported for profile lookup' })
+    } catch (err) {
+      console.error('Profile fetch failed:', err.message)
+      return res.status(500).json({ error: 'Failed to load profile' })
+    }
+  })
+
+  app.delete('/api/profile', async (req, res) => {
+    const normalizedRole = sanitizeRole(req.body?.role)
+    const parsedSignupId = Number(req.body?.signupId)
+
+    if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' })
+    if (!Number.isInteger(parsedSignupId) || parsedSignupId <= 0) {
+      return res.status(400).json({ error: 'Valid signupId is required' })
+    }
+
+    const client = await dbPool.connect()
+    try {
+      await client.query('BEGIN')
+
+      const signupRow = await client.query(
+        `
+        SELECT signup_id, role, role_name
+        FROM signup
+        WHERE signup_id = $1
+        LIMIT 1
+        `,
+        [parsedSignupId]
+      )
+      if (!signupRow.rows[0]) {
+        await client.query('ROLLBACK')
+        return res.status(404).json({ error: 'Signup account not found' })
+      }
+
+      const signupRole = sanitizeRole(signupRow.rows[0].role || signupRow.rows[0].role_name)
+      if (signupRole !== normalizedRole) {
+        await client.query('ROLLBACK')
+        return res.status(400).json({ error: 'Role does not match signup account' })
+      }
+
+      const hasMessages = await tableExists(client, 'messages')
+      const hasAssignments = await tableExists(client, 'assignments')
+      const hasQuestionnaire = await tableExists(client, 'questionnaire')
+      const hasAppointments = await tableExists(client, 'appointments')
+      const hasAvailability = await tableExists(client, 'therapist_availability')
+      const hasJournal = await tableExists(client, 'journal')
+
+      if (normalizedRole === 'student') {
+        const studentRow = await client.query('SELECT student_id FROM student WHERE signup_id = $1 LIMIT 1', [parsedSignupId])
+        if (studentRow.rows[0]) {
+          const studentId = Number(studentRow.rows[0].student_id)
+          if (hasMessages) {
+            await client.query('DELETE FROM messages WHERE student_id = $1', [studentId])
+          }
+          if (hasAssignments) {
+            await client.query('DELETE FROM assignments WHERE student_id = $1', [studentId])
+          }
+          if (hasJournal) {
+            await client.query('DELETE FROM journal WHERE student_id = $1', [studentId])
+          }
+          if (hasAppointments) {
+            await client.query('DELETE FROM appointments WHERE student_id = $1', [studentId])
+          }
+          await client.query('DELETE FROM student WHERE student_id = $1', [studentId])
+        }
+      }
+
+      if (normalizedRole === 'mentor') {
+        const mentorRow = await client.query('SELECT mentor_id FROM mentor WHERE signup_id = $1 LIMIT 1', [parsedSignupId])
+        if (mentorRow.rows[0]) {
+          const mentorId = Number(mentorRow.rows[0].mentor_id)
+          if (hasMessages) {
+            await client.query('DELETE FROM messages WHERE mentor_id = $1', [mentorId])
+          }
+          if (hasAssignments) {
+            await client.query('UPDATE assignments SET mentor_id = NULL WHERE mentor_id = $1', [mentorId])
+          }
+          if (hasQuestionnaire) {
+            await client.query('UPDATE questionnaire SET mentor_id = NULL WHERE mentor_id = $1', [mentorId])
+          }
+          if (hasAppointments) {
+            await client.query("DELETE FROM appointments WHERE therapist_type = 'mentor' AND therapist_id = $1", [mentorId])
+          }
+          if (hasAvailability) {
+            await client.query("DELETE FROM therapist_availability WHERE therapist_type = 'mentor' AND therapist_id = $1", [mentorId])
+          }
+          await client.query('DELETE FROM mentor WHERE mentor_id = $1', [mentorId])
+        }
+      }
+
+      if (normalizedRole === 'psychiatrist') {
+        const psychiatristRow = await client.query('SELECT psychiatrist_id FROM psychiatrist WHERE signup_id = $1 LIMIT 1', [parsedSignupId])
+        if (psychiatristRow.rows[0]) {
+          const psychiatristId = Number(psychiatristRow.rows[0].psychiatrist_id)
+          if (hasMessages) {
+            await client.query('DELETE FROM messages WHERE psychiatrist_id = $1', [psychiatristId])
+          }
+          if (hasAssignments) {
+            await client.query('UPDATE assignments SET psychiatrist_id = NULL WHERE psychiatrist_id = $1', [psychiatristId])
+          }
+          if (hasQuestionnaire) {
+            await client.query('UPDATE questionnaire SET psychiatrist_id = NULL WHERE psychiatrist_id = $1', [psychiatristId])
+          }
+          if (hasAppointments) {
+            await client.query("DELETE FROM appointments WHERE therapist_type = 'psychiatrist' AND therapist_id = $1", [psychiatristId])
+          }
+          if (hasAvailability) {
+            await client.query("DELETE FROM therapist_availability WHERE therapist_type = 'psychiatrist' AND therapist_id = $1", [psychiatristId])
+          }
+          await client.query('DELETE FROM psychiatrist WHERE psychiatrist_id = $1', [psychiatristId])
+        }
+      }
+
+      if (normalizedRole === 'admin') {
+        await client.query('DELETE FROM admins WHERE signup_id = $1', [parsedSignupId])
+      }
+
+      await client.query('DELETE FROM signup WHERE signup_id = $1', [parsedSignupId])
+      await client.query('COMMIT')
+
+      return res.json({ ok: true, message: 'Profile deleted successfully.' })
+    } catch (err) {
+      try {
+        await client.query('ROLLBACK')
+      } catch (_) {}
+      console.error('Profile delete failed:', err.message)
+      return res.status(500).json({ error: 'Failed to delete profile' })
+    } finally {
+      client.release()
     }
   })
 
@@ -2062,6 +2597,364 @@ function setupAuthRoutes(app, dbPool) {
     } catch (err) {
       console.error('Failed to load chat peers:', err.message)
       return res.status(500).json({ error: 'Failed to load peers' })
+    }
+  })
+
+  app.get('/api/admin/dashboard-data', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const usersResult = await dbPool.query(
+        `
+        SELECT
+          s.signup_id,
+          LOWER(COALESCE(s.role, s.role_name, '')) AS role,
+          s.email,
+          s.created_at,
+          st.student_id,
+          st.username AS student_username,
+          st.full_name AS student_full_name,
+          m.mentor_id,
+          m.full_name AS mentor_full_name,
+          p.psychiatrist_id,
+          p.full_name AS psychiatrist_full_name,
+          a.admin_id
+        FROM signup s
+        LEFT JOIN student st ON st.signup_id = s.signup_id
+        LEFT JOIN mentor m ON m.signup_id = s.signup_id
+        LEFT JOIN psychiatrist p ON p.signup_id = s.signup_id
+        LEFT JOIN admins a ON a.signup_id = s.signup_id
+        ORDER BY s.created_at DESC
+        `
+      )
+
+      const assignmentsResult = await dbPool.query(
+        `
+        SELECT
+          a.assignment_id,
+          a.student_id,
+          s.username AS student_username,
+          a.mentor_id,
+          m.full_name AS mentor_name,
+          a.psychiatrist_id,
+          p.full_name AS psychiatrist_name
+        FROM assignments a
+        LEFT JOIN student s ON s.student_id = a.student_id
+        LEFT JOIN mentor m ON m.mentor_id = a.mentor_id
+        LEFT JOIN psychiatrist p ON p.psychiatrist_id = a.psychiatrist_id
+        ORDER BY a.assignment_id DESC
+        `
+      )
+
+      const users = usersResult.rows.map((row) => {
+        const role = String(row.role || '')
+        const userId =
+          role === 'student'
+            ? row.student_id
+            : role === 'mentor'
+              ? row.mentor_id
+              : role === 'psychiatrist'
+                ? row.psychiatrist_id
+                : role === 'admin'
+                  ? row.admin_id
+                  : null
+
+        const displayName =
+          row.student_full_name ||
+          row.student_username ||
+          row.mentor_full_name ||
+          row.psychiatrist_full_name ||
+          row.email ||
+          '-'
+
+        return {
+          signupId: Number(row.signup_id),
+          userId: userId == null ? null : Number(userId),
+          role,
+          email: String(row.email || ''),
+          displayName: String(displayName),
+          createdAt: toIsoString(row.created_at),
+        }
+      })
+
+      const assignments = assignmentsResult.rows.map((row) => ({
+        assignmentId: Number(row.assignment_id),
+        studentId: row.student_id == null ? null : Number(row.student_id),
+        studentUsername: String(row.student_username || '-'),
+        mentorId: row.mentor_id == null ? null : Number(row.mentor_id),
+        mentorName: String(row.mentor_name || '-'),
+        psychiatristId: row.psychiatrist_id == null ? null : Number(row.psychiatrist_id),
+        psychiatristName: String(row.psychiatrist_name || '-'),
+      }))
+
+      return res.json({ ok: true, users, assignments })
+    } catch (err) {
+      console.error('Failed to load admin dashboard data:', err.message)
+      return res.status(500).json({ error: 'Failed to load admin dashboard data.' })
+    }
+  })
+
+  app.get('/api/admin/resources', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const result = await dbPool.query(
+        `
+        SELECT
+          r.resource_id,
+          r.title,
+          r.category,
+          r.description,
+          r.file_link,
+          r.created_at,
+          r.student_id,
+          s.username AS student_username
+        FROM resource r
+        LEFT JOIN student s ON s.student_id = r.student_id
+        ORDER BY r.resource_id DESC
+        `
+      )
+
+      return res.json({
+        ok: true,
+        rows: result.rows.map((row) => ({
+          resourceId: Number(row.resource_id),
+          title: String(row.title || ''),
+          category: String(row.category || ''),
+          description: String(row.description || ''),
+          fileLink: String(row.file_link || ''),
+          createdAt: toIsoString(row.created_at),
+          studentId: row.student_id == null ? null : Number(row.student_id),
+          studentUsername: String(row.student_username || ''),
+        })),
+      })
+    } catch (err) {
+      console.error('Failed to load resources:', err.message)
+      return res.status(500).json({ error: 'Failed to load resources.' })
+    }
+  })
+
+  app.get('/api/resources', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const result = await dbPool.query(
+        `
+        SELECT
+          r.resource_id,
+          r.title,
+          r.category,
+          r.description,
+          r.file_link,
+          r.created_at
+        FROM resource r
+        ORDER BY r.created_at DESC, r.resource_id DESC
+        `
+      )
+
+      return res.json({
+        ok: true,
+        rows: result.rows.map((row) => ({
+          resourceId: Number(row.resource_id),
+          title: String(row.title || ''),
+          category: String(row.category || ''),
+          description: String(row.description || ''),
+          fileLink: String(row.file_link || ''),
+          createdAt: toIsoString(row.created_at),
+        })),
+      })
+    } catch (err) {
+      console.error('Failed to load student resources:', err.message)
+      return res.status(500).json({ error: 'Failed to load resources.' })
+    }
+  })
+
+  app.post('/api/admin/resources', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const title = String(req.body?.title || '').trim().slice(0, 200)
+      const category = String(req.body?.category || '').trim().slice(0, 100)
+      const description = String(req.body?.description || '').trim().slice(0, 500)
+      const fileLink = String(req.body?.fileLink || '').trim().slice(0, 500)
+      const studentId = parsePositiveInt(req.body?.studentId)
+
+      if (!title) return res.status(400).json({ error: 'Title is required.' })
+
+      const inserted = await dbPool.query(
+        `
+        INSERT INTO resource (title, category, description, file_link, student_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING resource_id
+        `,
+        [title, category || null, description || null, fileLink || null, studentId]
+      )
+
+      return res.status(201).json({ ok: true, resourceId: Number(inserted.rows[0].resource_id) })
+    } catch (err) {
+      console.error('Failed to create resource:', err.message)
+      return res.status(500).json({ error: 'Failed to create resource.' })
+    }
+  })
+
+  app.put('/api/admin/resources/:resourceId', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const resourceId = parsePositiveInt(req.params.resourceId)
+      const title = String(req.body?.title || '').trim().slice(0, 200)
+      const category = String(req.body?.category || '').trim().slice(0, 100)
+      const description = String(req.body?.description || '').trim().slice(0, 500)
+      const fileLink = String(req.body?.fileLink || '').trim().slice(0, 500)
+      const studentId = parsePositiveInt(req.body?.studentId)
+
+      if (!resourceId) return res.status(400).json({ error: 'Valid resourceId is required.' })
+      if (!title) return res.status(400).json({ error: 'Title is required.' })
+
+      const updated = await dbPool.query(
+        `
+        UPDATE resource
+        SET title = $1,
+            category = $2,
+            description = $3,
+            file_link = $4,
+            student_id = $5
+        WHERE resource_id = $6
+        RETURNING resource_id
+        `,
+        [title, category || null, description || null, fileLink || null, studentId, resourceId]
+      )
+
+      if (!updated.rows[0]) return res.status(404).json({ error: 'Resource not found.' })
+      return res.json({ ok: true })
+    } catch (err) {
+      console.error('Failed to update resource:', err.message)
+      return res.status(500).json({ error: 'Failed to update resource.' })
+    }
+  })
+
+  app.delete('/api/admin/resources/:resourceId', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+      const resourceId = parsePositiveInt(req.params.resourceId)
+      if (!resourceId) return res.status(400).json({ error: 'Valid resourceId is required.' })
+
+      const deleted = await dbPool.query('DELETE FROM resource WHERE resource_id = $1 RETURNING resource_id', [resourceId])
+      if (!deleted.rows[0]) return res.status(404).json({ error: 'Resource not found.' })
+
+      return res.json({ ok: true })
+    } catch (err) {
+      console.error('Failed to delete resource:', err.message)
+      return res.status(500).json({ error: 'Failed to delete resource.' })
+    }
+  })
+
+  app.get('/api/admin/emergency-contacts', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const result = await dbPool.query(
+        `
+        SELECT
+          e.contact_id,
+          COALESCE(e.conatct_name, e.contact_name) AS contact_name,
+          e.phone_no,
+          e.student_id,
+          s.username AS student_username
+        FROM emergency_contact e
+        LEFT JOIN student s ON s.student_id = e.student_id
+        ORDER BY e.contact_id DESC
+        `
+      )
+
+      return res.json({
+        ok: true,
+        rows: result.rows.map((row) => ({
+          contactId: Number(row.contact_id),
+          contactName: String(row.contact_name || ''),
+          phoneNo: row.phone_no == null ? '' : String(row.phone_no),
+          studentId: row.student_id == null ? null : Number(row.student_id),
+          studentUsername: String(row.student_username || ''),
+        })),
+      })
+    } catch (err) {
+      console.error('Failed to load emergency contacts:', err.message)
+      return res.status(500).json({ error: 'Failed to load emergency contacts.' })
+    }
+  })
+
+  app.post('/api/admin/emergency-contacts', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const contactName = String(req.body?.contactName || '').trim().slice(0, 100)
+      const phoneNo = parseNullablePhone(req.body?.phoneNo)
+      const studentId = parsePositiveInt(req.body?.studentId)
+
+      if (!contactName) return res.status(400).json({ error: 'Contact name is required.' })
+
+      const inserted = await dbPool.query(
+        `
+        INSERT INTO emergency_contact (conatct_name, contact_name, phone_no, student_id)
+        VALUES ($1, $1, $2, $3)
+        RETURNING contact_id
+        `,
+        [contactName, phoneNo, studentId]
+      )
+
+      return res.status(201).json({ ok: true, contactId: Number(inserted.rows[0].contact_id) })
+    } catch (err) {
+      console.error('Failed to create emergency contact:', err.message)
+      return res.status(500).json({ error: 'Failed to create emergency contact.' })
+    }
+  })
+
+  app.put('/api/admin/emergency-contacts/:contactId', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const contactId = parsePositiveInt(req.params.contactId)
+      const contactName = String(req.body?.contactName || '').trim().slice(0, 100)
+      const phoneNo = parseNullablePhone(req.body?.phoneNo)
+      const studentId = parsePositiveInt(req.body?.studentId)
+
+      if (!contactId) return res.status(400).json({ error: 'Valid contactId is required.' })
+      if (!contactName) return res.status(400).json({ error: 'Contact name is required.' })
+
+      const updated = await dbPool.query(
+        `
+        UPDATE emergency_contact
+        SET conatct_name = $1,
+            contact_name = $1,
+            phone_no = $2,
+            student_id = $3
+        WHERE contact_id = $4
+        RETURNING contact_id
+        `,
+        [contactName, phoneNo, studentId, contactId]
+      )
+
+      if (!updated.rows[0]) return res.status(404).json({ error: 'Emergency contact not found.' })
+      return res.json({ ok: true })
+    } catch (err) {
+      console.error('Failed to update emergency contact:', err.message)
+      return res.status(500).json({ error: 'Failed to update emergency contact.' })
+    }
+  })
+
+  app.delete('/api/admin/emergency-contacts/:contactId', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+      const contactId = parsePositiveInt(req.params.contactId)
+      if (!contactId) return res.status(400).json({ error: 'Valid contactId is required.' })
+
+      const deleted = await dbPool.query('DELETE FROM emergency_contact WHERE contact_id = $1 RETURNING contact_id', [contactId])
+      if (!deleted.rows[0]) return res.status(404).json({ error: 'Emergency contact not found.' })
+
+      return res.json({ ok: true })
+    } catch (err) {
+      console.error('Failed to delete emergency contact:', err.message)
+      return res.status(500).json({ error: 'Failed to delete emergency contact.' })
     }
   })
 }

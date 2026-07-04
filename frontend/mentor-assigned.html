@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tuliza - Assigned Students</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav class="navbar" aria-label="Main navigation">
+    <a class="logo" href="/mentor.html">
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1C4.7 1 2 3.7 2 7c0 2.1 1.1 4 2.7 5.1L8 15l3.3-2.9C12.9 11 14 9.1 14 7c0-3.3-2.7-6-6-6zm0 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+        </svg>
+      </div>
+      <span class="logo-text">Tuliz<span class="accent-letter">a</span></span>
+    </a>
+    <div class="nav-tabs" role="navigation" aria-label="Section links">
+      <a class="nav-tab" href="/mentor.html">Dashboard</a>
+      <a class="nav-tab" href="/chat-ui.html">Chat</a>
+      <a class="nav-tab" href="/profile-mentor.html">Profile</a>
+      <button class="nav-tab" id="logout-btn" type="button">Logout</button>
+    </div>
+  </nav>
+
+  <main class="role-main fade-up">
+    <section class="role-hero">
+      <div>
+        <p class="role-eyebrow">Mentor details</p>
+        <h1>All assigned student information</h1>
+        <p class="subtitle">Review the full details submitted by each assigned student in one place.</p>
+      </div>
+      <div class="role-actions">
+        <a class="btn-ghost-modal" href="/mentor.html">Back to dashboard</a>
+      </div>
+    </section>
+
+    <section class="role-stack" id="mentor-details-container" aria-live="polite">
+      <article class="role-panel">
+        <p class="role-kpi-meta">Loading assigned students...</p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const container = document.getElementById('mentor-details-container');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    function safeText(value) {
+      return String(value || '').trim() || '-';
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    function createReadonlyField(label, value, isTextarea) {
+      const group = document.createElement('div');
+      group.className = 'form-group';
+
+      const fieldLabel = document.createElement('label');
+      fieldLabel.className = 'form-label';
+      fieldLabel.textContent = label;
+
+      const input = document.createElement(isTextarea ? 'textarea' : 'input');
+      input.className = isTextarea ? 'form-textarea' : 'form-input';
+      input.readOnly = true;
+      input.value = safeText(value);
+
+      group.appendChild(fieldLabel);
+      group.appendChild(input);
+      return group;
+    }
+
+    function renderMessage(message) {
+      container.innerHTML = '';
+      const card = document.createElement('article');
+      card.className = 'role-panel';
+      const text = document.createElement('p');
+      text.className = 'role-kpi-meta';
+      text.textContent = message;
+      card.appendChild(text);
+      container.appendChild(card);
+    }
+
+    function renderForms(rows) {
+      container.innerHTML = '';
+
+      rows.forEach((row, index) => {
+        const card = document.createElement('article');
+        card.className = 'role-panel';
+
+        const heading = document.createElement('h2');
+        heading.textContent = `Student ${index + 1}: ${safeText(row.username)}`;
+        card.appendChild(heading);
+
+        card.appendChild(createReadonlyField('Student ID', row.student_id, false));
+        card.appendChild(createReadonlyField('Username', row.username, false));
+        card.appendChild(createReadonlyField('Current concern', row.concerns, true));
+        card.appendChild(createReadonlyField('Mental health support history', row.mentalhealthsupport, true));
+        card.appendChild(createReadonlyField('Religion', row.religion, false));
+        card.appendChild(createReadonlyField('Religion type', row.religion_type, false));
+        card.appendChild(createReadonlyField('Spiritual status', row.spiritual_status, false));
+        card.appendChild(createReadonlyField('Current support need', row.seek_support, true));
+        card.appendChild(createReadonlyField('Support expectations', row.expectations, true));
+        card.appendChild(createReadonlyField('Has prior contact', row.has_contact ? 'Yes' : 'No', false));
+        card.appendChild(createReadonlyField('Assigned at', formatDate(row.created_at), false));
+
+        container.appendChild(card);
+      });
+    }
+
+    async function loadAssignedForms() {
+      let sessionUser = null;
+      try {
+        sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+      } catch (_) {
+        sessionUser = null;
+      }
+
+      if (!sessionUser || sessionUser.role !== 'mentor' || !sessionUser.userId) {
+        window.location.href = '/account.html';
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/questionnaire/assigned-view?role=mentor&userId=${encodeURIComponent(sessionUser.userId)}`);
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          renderMessage(safeText(payload.error) || 'Failed to load assigned students.');
+          return;
+        }
+
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) {
+          renderMessage('No students are currently assigned to you.');
+          return;
+        }
+
+        renderForms(rows);
+      } catch (_) {
+        renderMessage('Could not reach server.');
+      }
+    }
+
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('tuliza_session_token');
+        sessionStorage.removeItem('tuliza_session_user');
+        window.location.href = '/account.html';
+      });
+    }
+
+    loadAssignedForms();
+  </script>
+</body>
+</html>
