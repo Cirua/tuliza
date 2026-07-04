@@ -8,26 +8,10 @@
 </head>
 <body>
   <div class="app-shell">
-    <nav class="navbar" role="navigation" aria-label="Main navigation">
-      <a href="/student.html" class="logo" aria-label="Tuliza home">
-        <div class="logo-mark" aria-hidden="true">
-          <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-            <path d="M8 1C4.7 1 2 3.7 2 7c0 2.1 1.1 4 2.7 5.1L8 15l3.3-2.9C12.9 11 14 9.1 14 7c0-3.3-2.7-6-6-6zm0 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
-          </svg>
-        </div>
-        <span class="logo-text">Tuliz<span class="accent-letter">a</span></span>
-      </a>
-
-      <div class="nav-tabs" role="navigation" aria-label="Section links">
-        <a class="nav-tab" href="/student.html">Dashboard</a>
-        <a class="nav-tab active" href="chat-ui.html" aria-current="page">Chat</a>
-        <a class="nav-tab" href="resources.html">Resources</a>
-        <a class="nav-tab" href="journal.html">Journal</a>
-        <a class="nav-tab" href="account.html">Account</a>
-      </div>
-    </nav>
-
     <main class="detail-main">
+      <div class="role-panel-head" style="margin-bottom:12px;">
+        <a id="chat-back-btn" class="btn-ghost-modal" href="/account.html" aria-label="Go back to dashboard">Back to dashboard</a>
+      </div>
       <h1 style="margin-bottom:12px;">Conversations</h1>
 
       <section class="detail-card chat-wrap" id="chat-student-panel" hidden>
@@ -107,6 +91,29 @@
   </div>
 
   <script src="/backend/chat.js"></script>
+  <script>
+    (function () {
+      const backBtn = document.getElementById('chat-back-btn');
+      if (!backBtn) return;
+
+      let sessionUser = {};
+      try {
+        sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+      } catch (_) {
+        sessionUser = {};
+      }
+
+      const role = String(sessionUser.role || '').toLowerCase();
+      const dashboardByRole = {
+        student: '/student.html',
+        mentor: '/mentor.html',
+        psychiatrist: '/psychologist.html',
+        admin: '/admin.html',
+      };
+
+      backBtn.href = dashboardByRole[role] || '/account.html';
+    })();
+  </script>
 </body>
 </html>
 

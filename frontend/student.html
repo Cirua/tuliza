@@ -29,80 +29,10 @@
         <a class="nav-tab" href="/chat-ui.html">Chat</a>
         <a class="nav-tab" href="/resources.html">Resources</a>
         <a class="nav-tab" href="/journal.html">Journal</a>
-        <a class="nav-tab" href="/account.html">Account</a>
+        <a class="nav-tab" href="/profile-student.html">Profile</a>
+        <button class="nav-tab" id="logout-btn" type="button">Logout</button>
       </div>
-
-      <div class="nav-right">
-        <div class="anon-badge" aria-label="You are browsing anonymously">
-          <div class="anon-dot"></div>
-          Anonymous
-        </div>
-
-        <button class="emergency-btn" aria-label="Open crisis help">
-          <div class="pulse-ring" aria-hidden="true"></div>
-          Crisis Help
-        </button>
-      </div>
-    </nav>
-
-    <div class="main-area">
-
-      <aside class="sidebar" aria-label="Side navigation">
-        <span class="sidebar-section-label">Menu</span>
-
-        <button class="sidebar-item active" aria-current="page" data-link="/student.html" aria-label="Overview">
-          <!-- Overview icon -->
-          <svg class="item-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <rect x="1" y="1" width="6" height="6" rx="1"/>
-            <rect x="9" y="1" width="6" height="6" rx="1"/>
-            <rect x="1" y="9" width="6" height="6" rx="1"/>
-            <rect x="9" y="9" width="6" height="6" rx="1"/>
-          </svg>
-          <span>Overview</span>
-        </button>
-
-        <button class="sidebar-item" data-link="/journal.html" aria-label="My Wellbeing">
-          <svg class="item-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a5 5 0 110 10A5 5 0 018 3zm-1 4h2v5H7zm0-3h2v2H7z"/>
-          </svg>
-          <span>My Wellbeing</span>
-        </button>
-
-        <button class="sidebar-item" data-link="/chat-ui.html" aria-label="Conversations">
-          <svg class="item-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M2 2h12a1 1 0 011 1v8a1 1 0 01-1 1H9l-3 2v-2H2a1 1 0 01-1-1V3a1 1 0 011-1z"/>
-          </svg>
-          <span>Conversations</span>
-          <span class="sidebar-badge">2</span>
-        </button>
-
-        <div class="divider"></div>
-        <span class="sidebar-section-label">Support</span>
-
-        <button class="sidebar-item" data-modal="booking-modal" aria-label="Book a Session">
-          <svg class="item-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M8 1L5.5 6H1l4 3.5-1.5 5L8 12l4.5 2.5-1.5-5L15 6h-4.5z"/>
-          </svg>
-          <span>Book a Session</span>
-        </button>
-
-        <button class="sidebar-item" data-link="/resources.html" aria-label="Resources">
-          <svg class="item-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M2 2h12v12H2V2zm1 1v10h10V3H3zm2 2h6v1H5zm0 2h6v1H5zm0 2h4v1H5z"/>
-          </svg>
-          <span>Resources</span>
-        </button>
-
-        <button class="sidebar-item" data-link="/journal.html" aria-label="Journal">
-          <svg class="item-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M3 1h10a1 1 0 011 1v12l-3-2H3a1 1 0 01-1-1V2a1 1 0 011-1zm1 3v1h8V4H4zm0 2v1h6V6H4z"/>
-          </svg>
-          <span>Journal</span>
-        </button>
-      </aside>
-
-      <main class="content" id="main-content">
-
+      </nav>
         <div class="greeting-block fade-up">
           <p class="greeting-sub" id="greeting-sub">Welcome back</p>
           <h1 class="greeting-title">How are you feeling <em>today?</em></h1>
@@ -128,7 +58,7 @@
             </article>
           </div>
         </section>
-
+      </br>
         <div class="mood-card fade-up fade-up-delay-2">
           <h3>Quick mood check-in</h3>
           <div class="mood-grid" role="group" aria-label="Select your current mood">
@@ -228,6 +158,34 @@
             <p class="journal-meta" id="assigned-support-extra-2"></p>
           </div>
         </div>
+
+        <section class="role-panel fade-up fade-up-delay-3" aria-label="Resources from database" style="margin-top:16px;">
+          <div class="role-panel-head">
+            <h2>Resources from database</h2>
+            <a class="btn-ghost-modal" href="/resources.html">Open resources page</a>
+          </div>
+          <div class="form-group" style="margin-bottom:12px;">
+            <label class="form-label" for="student-resource-search">Filter by category</label>
+            <input id="student-resource-search" class="form-input" type="text" placeholder="e.g. anxiety, sleep, exams" />
+          </div>
+          <div class="role-table-wrap">
+            <table class="role-table" aria-label="Student resources table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Link</th>
+                </tr>
+              </thead>
+              <tbody id="student-resources-body">
+                <tr>
+                  <td colspan="4">Loading resources...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
 
       </main>
 
@@ -429,6 +387,83 @@
       }
     }
 
+    async function loadStudentResourcesTable() {
+      const body = document.getElementById('student-resources-body');
+      if (!body) return;
+
+      const searchInput = document.getElementById('student-resource-search');
+
+      const renderRows = (rows, query) => {
+        const normalizedQuery = String(query || '').trim().toLowerCase();
+        const filteredRows = normalizedQuery
+          ? rows.filter((row) => String(row.category || '').toLowerCase().includes(normalizedQuery))
+          : rows;
+
+        if (!filteredRows.length) {
+          body.innerHTML = '<tr><td colspan="4">No resources match this category.</td></tr>';
+          return;
+        }
+
+        body.innerHTML = '';
+        filteredRows.forEach((row) => {
+          const tr = document.createElement('tr');
+
+          const title = document.createElement('td');
+          title.textContent = String(row.title || '-');
+
+          const category = document.createElement('td');
+          category.textContent = String(row.category || '-');
+
+          const description = document.createElement('td');
+          description.textContent = String(row.description || '-');
+
+          const link = document.createElement('td');
+          if (row.fileLink) {
+            const anchor = document.createElement('a');
+            anchor.href = String(row.fileLink);
+            anchor.target = '_blank';
+            anchor.rel = 'noreferrer';
+            anchor.textContent = 'Open';
+            link.appendChild(anchor);
+          } else {
+            link.textContent = '-';
+          }
+
+          tr.appendChild(title);
+          tr.appendChild(category);
+          tr.appendChild(description);
+          tr.appendChild(link);
+          body.appendChild(tr);
+        });
+      };
+
+      try {
+        const response = await fetch('/api/resources');
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          body.innerHTML = '<tr><td colspan="4">' + (payload.error || 'Failed to load resources.') + '</td></tr>';
+          return;
+        }
+
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="4">No resources available yet.</td></tr>';
+          return;
+        }
+
+        if (searchInput) {
+          searchInput.addEventListener('input', () => {
+            renderRows(rows, searchInput.value);
+          });
+        }
+
+        renderRows(rows, searchInput ? searchInput.value : '');
+      } catch (_) {
+        body.innerHTML = '<tr><td colspan="4">Could not reach server.</td></tr>';
+      }
+    }
+
     function initializeStudentDashboardInteractions() {
       const moodButtons = Array.from(document.querySelectorAll('.mood-btn'));
       const summaryMood = document.getElementById('summary-mood');
@@ -517,7 +552,17 @@
       applyGreeting(verifiedStudentSession);
     }
 
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('tuliza_session_token');
+        sessionStorage.removeItem('tuliza_session_user');
+        window.location.href = '/account.html';
+      });
+    }
+
     loadAssignedSupportProfile();
+    loadStudentResourcesTable();
     initializeStudentDashboardInteractions();
   </script>
 
