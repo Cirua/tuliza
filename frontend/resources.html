@@ -46,92 +46,15 @@
 
     <p class="resource-result-count" id="resource-result-count" aria-live="polite"></p>
 
-    <section class="grid" aria-label="Resource list" id="resource-grid">
-      <a class="resource-card-link" href="resource-detail.html?topic=exam-pressure" data-resource-card data-title="coping with exam pressure" data-tags="stress exams study" data-category="stress">
-      <article class="card">
-        <div class="thumb">
-          <img src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80" alt="Student preparing for exams" loading="lazy" />
-        </div>
-        <div class="card-body">
-          <span class="tag">Study</span>
-          <h2>Coping With Exam Pressure</h2>
-          <p>Simple ways to lower stress during revision and exam weeks.</p>
-        </div>
-      </article>
-      </a>
-
-      <a class="resource-card-link" href="resource-detail.html?topic=calm-reset" data-resource-card data-title="2 minute calm reset" data-tags="anxiety breathing stress" data-category="anxiety">
-      <article class="card">
-        <div class="thumb">
-          <img src="https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=80" alt="Person doing calm breathing exercise" loading="lazy" />
-        </div>
-        <div class="card-body">
-          <span class="tag">Breathing</span>
-          <h2>2-Minute Calm Reset</h2>
-          <p>A guided breathing pattern for anxiety spikes and racing thoughts.</p>
-        </div>
-      </article>
-      </a>
-
-      <a class="resource-card-link" href="resource-detail.html?topic=sleep-balance" data-resource-card data-title="sleep and study balance" data-tags="sleep focus study stress" data-category="sleep">
-      <article class="card">
-        <div class="thumb">
-          <img src="https://images.pexels.com/photos/3771069/pexels-photo-3771069.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="Peaceful sleep setup with warm lighting" loading="lazy" onerror="this.onerror=null;this.src='https://images.pexels.com/photos/935777/pexels-photo-935777.jpeg?auto=compress&cs=tinysrgb&w=1200';" />
-        </div>
-        <div class="card-body">
-          <span class="tag">Sleep</span>
-          <h2>Sleep and Study Balance</h2>
-          <p>Improve focus by building a healthier evening routine.</p>
-        </div>
-      </article>
-      </a>
-
-      <a class="resource-card-link" href="resource-detail.html?topic=overthinking-toolkit" data-resource-card data-title="overthinking toolkit" data-tags="mindset anxiety overthinking" data-category="mindset">
-      <article class="card">
-        <div class="thumb">
-          <img src="https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=1200&q=80" alt="Notebook and coffee for reflection" loading="lazy" />
-        </div>
-        <div class="card-body">
-          <span class="tag">Mindset</span>
-          <h2>Overthinking Toolkit</h2>
-          <p>Practical prompts to slow mental spirals and ground yourself.</p>
-        </div>
-      </article>
-      </a>
-
-      <a class="resource-card-link" href="resource-detail.html?topic=ask-for-help" data-resource-card data-title="when to ask for help" data-tags="support stress anxiety" data-category="stress">
-      <article class="card">
-        <div class="thumb">
-          <img src="https://images.unsplash.com/photo-1516302752625-fcc3c50ae61f?auto=format&fit=crop&w=1200&q=80" alt="Two people having a supportive conversation" loading="lazy" />
-        </div>
-        <div class="card-body">
-          <span class="tag">Support</span>
-          <h2>When to Ask for Help</h2>
-          <p>Signs that indicate it might be time to speak with a counselor.</p>
-        </div>
-      </article>
-      </a>
-
-      <a class="resource-card-link" href="resource-detail.html?topic=journaling-prompts" data-resource-card data-title="journaling starter prompts" data-tags="mindset reflection journal" data-category="mindset">
-      <article class="card">
-        <div class="thumb">
-          <img src="https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1200&q=80" alt="Open journal for reflective writing" loading="lazy" />
-        </div>
-        <div class="card-body">
-          <span class="tag">Reflection</span>
-          <h2>Journaling Starter Prompts</h2>
-          <p>Gentle prompts for processing difficult days and emotions.</p>
-        </div>
-      </article>
-      </a>
-    </section>
+    <section class="grid" aria-label="Resource list" id="resource-grid"></section>
     <p class="resource-empty-state" id="resource-empty-state" style="display:none;">No resources matched your search. Try another keyword or filter.</p>
   </main>
 
   <script>
     const searchInput = document.getElementById('resource-search');
     const filterButtons = Array.from(document.querySelectorAll('.resource-chip'));
-    const resourceCards = Array.from(document.querySelectorAll('[data-resource-card]'));
+    const resourceGrid = document.getElementById('resource-grid');
+    let resourceCards = [];
     const emptyState = document.getElementById('resource-empty-state');
     const resultCount = document.getElementById('resource-result-count');
 
@@ -139,6 +62,79 @@
 
     function normalize(text) {
       return String(text || '').toLowerCase().trim();
+    }
+
+    function inferCategory(resource) {
+      const haystack = normalize(`${resource.category || ''} ${resource.title || ''} ${resource.description || ''}`);
+      if (haystack.includes('sleep')) return 'sleep';
+      if (haystack.includes('anxiety') || haystack.includes('panic') || haystack.includes('breath')) return 'anxiety';
+      if (haystack.includes('mindset') || haystack.includes('journal') || haystack.includes('reflection')) return 'mindset';
+      if (haystack.includes('stress') || haystack.includes('exam') || haystack.includes('pressure')) return 'stress';
+      return 'mindset';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
+    function buildResourceCard(resource) {
+      const resourceId = Number(resource.resourceId);
+      const title = String(resource.title || 'Untitled resource').trim();
+      const description = String(resource.description || 'Helpful guidance for your wellbeing journey.').trim();
+      const category = inferCategory(resource);
+      const categoryLabel = String(resource.category || category).trim() || category;
+      const link = Number.isInteger(resourceId) && resourceId > 0
+        ? `/resource-detail.html?resourceId=${resourceId}`
+        : `resource-detail.html?topic=${encodeURIComponent(title.toLowerCase().replace(/\s+/g, '-'))}`;
+      const safeTitle = escapeHtml(title);
+      const safeDescription = escapeHtml(description);
+      const safeCategoryLabel = escapeHtml(categoryLabel);
+      const safeLink = escapeAttr(link);
+      const safeTags = escapeAttr(`${categoryLabel} ${title} ${description}`);
+
+      return `
+        <a class="resource-card-link" href="${safeLink}" data-resource-card data-title="${escapeAttr(title)}" data-tags="${safeTags}" data-category="${escapeAttr(category)}">
+          <article class="card">
+            <div class="thumb">
+              <span class="tag" style="position:absolute; left:12px; top:12px;">${safeCategoryLabel}</span>
+            </div>
+            <div class="card-body">
+              <span class="tag">${safeCategoryLabel}</span>
+              <h2>${safeTitle}</h2>
+              <p>${safeDescription}</p>
+            </div>
+          </article>
+        </a>
+      `;
+    }
+
+    async function loadAdminManagedResources() {
+      try {
+        const response = await fetch('/api/resources');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) return;
+
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) {
+          resourceGrid.innerHTML = '';
+          resourceCards = [];
+          return;
+        }
+
+        resourceGrid.innerHTML = rows.map((row) => buildResourceCard(row)).join('');
+        resourceCards = Array.from(document.querySelectorAll('[data-resource-card]'));
+      } catch (_) {
+        // Keep static fallback cards if API is not available.
+      }
     }
 
     function applyFilters() {
@@ -178,7 +174,10 @@
       searchInput.addEventListener('input', applyFilters);
     }
 
-    applyFilters();
+    (async () => {
+      await loadAdminManagedResources();
+      applyFilters();
+    })();
   </script>
 
 </body>

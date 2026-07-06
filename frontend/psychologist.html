@@ -36,7 +36,7 @@
       </div>
       <div class="role-actions">
         <button class="btn-primary" type="button">New consultation</button>
-        <button class="btn-ghost-modal" type="button">Generate case report</button>
+        <button id="psych-case-report-btn" class="btn-ghost-modal" type="button">Generate case report</button>
       </div>
     </section>
 
@@ -90,19 +90,46 @@
           <ul id="psych-appointments-list" class="role-list">
             <li>Loading booked appointments...</li>
           </ul>
+          <p id="psych-case-report-msg" class="role-help-text" style="margin-top:10px;"></p>
+        </article>
+        <article class="role-panel">
+          <h3>Available time</h3>
+          <p class="role-help-text">Default slots are auto-generated from working hours. You can block a full day when unavailable.</p>
+          <form id="psych-block-day-form" class="role-inline-actions" style="margin-bottom:12px; flex-wrap:wrap;">
+            <input id="psych-block-date" class="form-input" type="date" />
+            <button class="btn-primary" type="submit">Block day</button>
+            <button id="psych-unblock-day-btn" class="btn-ghost-modal" type="button">Unblock day</button>
+          </form>
+          <p id="psych-calendar-msg" class="role-help-text"></p>
+          <div id="psych-calendar" class="appointment-calendar">
+            <p class="appointment-empty">Loading calendar...</p>
+          </div>
         </article>
         <article class="role-panel">
           <h3>Risk overview</h3>
-          <ul class="role-list">
-            <li>2 students reported severe distress in 24h</li>
-            <li>4 overdue follow-ups older than 7 days</li>
-            <li>1 referral awaiting external facility response</li>
+          <form id="psych-risk-form" class="role-inline-actions" style="margin-bottom:12px;">
+            <input id="psych-risk-input" class="form-input" type="text" maxlength="500" placeholder="Add risk overview item..." />
+            <button class="btn-primary" type="submit">Add</button>
+          </form>
+          <p id="psych-risk-msg" class="role-help-text"></p>
+          <ul id="psych-risk-list" class="role-list">
+            <li>Loading risk overview...</li>
           </ul>
         </article>
         <article class="role-panel">
           <h3>Session note draft</h3>
-          <textarea class="form-textarea" placeholder="Observations, intervention used, treatment plan..."></textarea>
-          <button class="btn-primary" type="button" style="margin-top:12px;">Save clinical note</button>
+          <form id="psych-notes-form">
+            <input id="psych-note-id" type="hidden" />
+            <textarea id="psych-note-input" class="form-textarea" placeholder="Observations, intervention used, treatment plan..."></textarea>
+            <div class="role-inline-actions" style="margin-top:12px;">
+              <button class="btn-primary" type="submit">Save clinical note</button>
+              <button id="psych-note-reset" class="btn-ghost-modal" type="button">Clear</button>
+            </div>
+          </form>
+          <p id="psych-notes-msg" class="role-help-text"></p>
+          <ul id="psych-notes-list" class="role-list" style="margin-top:12px;">
+            <li>Loading saved notes...</li>
+          </ul>
         </article>
       </aside>
     </section>
@@ -114,7 +141,32 @@
     const psychiatristKpiNewest = document.getElementById('psy-kpi-newest');
     const psychiatristKpiUncontacted = document.getElementById('psy-kpi-uncontacted');
     const psychAppointmentsList = document.getElementById('psych-appointments-list');
+    const psychCaseReportBtn = document.getElementById('psych-case-report-btn');
+    const psychCaseReportMsg = document.getElementById('psych-case-report-msg');
+
+    const psychCalendar = document.getElementById('psych-calendar');
+    const psychBlockDayForm = document.getElementById('psych-block-day-form');
+    const psychBlockDate = document.getElementById('psych-block-date');
+    const psychUnblockDayBtn = document.getElementById('psych-unblock-day-btn');
+    const psychCalendarMsg = document.getElementById('psych-calendar-msg');
+
+    const psychRiskForm = document.getElementById('psych-risk-form');
+    const psychRiskInput = document.getElementById('psych-risk-input');
+    const psychRiskMsg = document.getElementById('psych-risk-msg');
+    const psychRiskList = document.getElementById('psych-risk-list');
+
+    const psychNotesForm = document.getElementById('psych-notes-form');
+    const psychNoteId = document.getElementById('psych-note-id');
+    const psychNoteInput = document.getElementById('psych-note-input');
+    const psychNoteReset = document.getElementById('psych-note-reset');
+    const psychNotesMsg = document.getElementById('psych-notes-msg');
+    const psychNotesList = document.getElementById('psych-notes-list');
+
     const logoutBtn = document.getElementById('logout-btn');
+
+    let resolvedPsychiatristId = null;
+    let riskRows = [];
+    let noteRows = [];
 
     if (logoutBtn) {
       logoutBtn.addEventListener('click', () => {
@@ -126,6 +178,95 @@
 
     function safeText(value) {
       return String(value || '').trim() || '-';
+    }
+
+    function setMessage(el, message, isError) {
+      if (!el) return;
+      el.textContent = message || '';
+      el.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function buildApiCandidates(url) {
+      if (!url || /^https?:\/\//i.test(url)) return [url];
+
+      const candidates = [url];
+      if (!url.startsWith('/api/')) return candidates;
+
+      const host = String(window.location.hostname || '').toLowerCase();
+      const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+      if (!isLocalHost) return candidates;
+
+      const activePort = Number.parseInt(String(window.location.port || ''), 10);
+      const inBackendRange = Number.isInteger(activePort) && activePort >= 3000 && activePort <= 3010;
+
+      if (!inBackendRange) {
+        for (let port = 3000; port <= 3010; port += 1) {
+          candidates.push(`${window.location.protocol}//${host}:${port}${url}`);
+        }
+      }
+
+      return Array.from(new Set(candidates));
+    }
+
+    async function api(url, options) {
+      const candidates = buildApiCandidates(url);
+      let lastError = null;
+
+      for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        let response;
+
+        try {
+          response = await fetch(candidate, options);
+        } catch (_) {
+          lastError = new Error(`Could not reach server (${candidate}).`);
+          continue;
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok) return payload;
+
+        const fallback = `${response.status} ${response.statusText || 'Request failed'}`;
+        lastError = new Error(payload.error || `${fallback} (${candidate})`);
+
+        if (response.status === 404 && i < candidates.length - 1) {
+          continue;
+        }
+
+        throw lastError;
+      }
+
+      throw lastError || new Error('Could not reach server.');
+    }
+
+    function formatDateTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    function toInputDate(date) {
+      const d = new Date(date);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    async function ensurePsychiatristId(sessionUser) {
+      if (!sessionUser) return null;
+      const direct = Number(sessionUser.userId);
+      if (Number.isInteger(direct) && direct > 0) {
+        const payload = await api(`/api/users/resolve-id?role=psychiatrist&identifier=${encodeURIComponent(String(direct))}`);
+        if (payload.userId) return Number(payload.userId);
+      }
+
+      const email = String(sessionUser.email || '').trim();
+      if (email) {
+        const payload = await api(`/api/users/resolve-id?role=psychiatrist&identifier=${encodeURIComponent(email)}`);
+        if (payload.userId) return Number(payload.userId);
+      }
+      return null;
     }
 
     function renderMessage(message) {
@@ -246,9 +387,310 @@
       }
     }
 
-    (async () => {
-      await loadPsychiatristAssignments();
+    function renderPsychCalendar(slots) {
+      if (!psychCalendar) return;
+      psychCalendar.innerHTML = '';
 
+      if (!slots.length) {
+        psychCalendar.innerHTML = '<p class="appointment-empty">No availability slots found yet.</p>';
+        return;
+      }
+
+      const byDate = new Map();
+      slots.forEach((slot) => {
+        const dateKey = new Date(slot.startAt).toLocaleDateString();
+        if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+        byDate.get(dateKey).push(slot);
+      });
+
+      byDate.forEach((daySlots, dateKey) => {
+        const card = document.createElement('div');
+        card.className = 'appointment-day-card';
+
+        const title = document.createElement('h3');
+        title.textContent = dateKey;
+        card.appendChild(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'slot-grid';
+
+        daySlots.forEach((slot) => {
+          const start = new Date(slot.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const end = new Date(slot.endAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const div = document.createElement('div');
+          div.className = `slot-chip ${slot.status === 'available' ? 'is-available' : 'is-unavailable'}`;
+          div.textContent = `${start} - ${end} (${slot.status})`;
+          grid.appendChild(div);
+        });
+
+        card.appendChild(grid);
+        psychCalendar.appendChild(card);
+      });
+    }
+
+    async function loadPsychCalendar() {
+      if (!resolvedPsychiatristId) return;
+      const payload = await api(`/api/psychiatrist/calendar?psychiatristId=${encodeURIComponent(String(resolvedPsychiatristId))}&days=30`);
+      renderPsychCalendar(Array.isArray(payload.slots) ? payload.slots : []);
+    }
+
+    function renderRiskRows() {
+      if (!psychRiskList) return;
+      psychRiskList.innerHTML = '';
+      if (!riskRows.length) {
+        psychRiskList.innerHTML = '<li>No risk items yet.</li>';
+        return;
+      }
+
+      riskRows.forEach((row) => {
+        const li = document.createElement('li');
+        li.className = 'role-list-item';
+        li.innerHTML = `
+          <input class="form-input" data-risk-text="${row.riskId}" value="${String(row.itemText || '').replace(/"/g, '&quot;')}" />
+          <div class="role-inline-actions">
+            <button class="role-mini-btn" type="button" data-risk-save="${row.riskId}">Save</button>
+            <button class="role-mini-btn" type="button" data-risk-delete="${row.riskId}">Delete</button>
+          </div>
+        `;
+        psychRiskList.appendChild(li);
+      });
+    }
+
+    async function loadRiskRows() {
+      if (!resolvedPsychiatristId) return;
+      const payload = await api(`/api/psychiatrist/risk-overview?psychiatristId=${encodeURIComponent(String(resolvedPsychiatristId))}`);
+      riskRows = Array.isArray(payload.rows) ? payload.rows : [];
+      renderRiskRows();
+    }
+
+    function resetNoteForm() {
+      psychNoteId.value = '';
+      psychNoteInput.value = '';
+      setMessage(psychNotesMsg, '', false);
+    }
+
+    function renderNoteRows() {
+      if (!psychNotesList) return;
+      psychNotesList.innerHTML = '';
+      if (!noteRows.length) {
+        psychNotesList.innerHTML = '<li>No saved notes yet.</li>';
+        return;
+      }
+
+      noteRows.forEach((row) => {
+        const li = document.createElement('li');
+        li.className = 'role-list-item';
+        li.innerHTML = `
+          <div>
+            <p style="white-space:pre-wrap; color:var(--text);">${safeText(row.noteText)}</p>
+            <p class="role-help-text">Updated: ${formatDateTime(row.updatedAt)}</p>
+          </div>
+          <div class="role-inline-actions">
+            <button class="role-mini-btn" type="button" data-note-edit="${row.noteId}">Edit</button>
+            <button class="role-mini-btn" type="button" data-note-delete="${row.noteId}">Delete</button>
+          </div>
+        `;
+        psychNotesList.appendChild(li);
+      });
+    }
+
+    async function loadNoteRows() {
+      if (!resolvedPsychiatristId) return;
+      const payload = await api(`/api/psychiatrist/notes?psychiatristId=${encodeURIComponent(String(resolvedPsychiatristId))}`);
+      noteRows = Array.isArray(payload.rows) ? payload.rows : [];
+      renderNoteRows();
+    }
+
+    psychBlockDayForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const dateValue = String(psychBlockDate.value || '').trim();
+      if (!dateValue) {
+        setMessage(psychCalendarMsg, 'Choose a date to block.', true);
+        return;
+      }
+
+      try {
+        await api('/api/therapists/block-day', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ therapistType: 'psychiatrist', therapistId: resolvedPsychiatristId, date: dateValue }),
+        });
+        setMessage(psychCalendarMsg, 'Day blocked successfully.', false);
+        await loadPsychCalendar();
+      } catch (err) {
+        setMessage(psychCalendarMsg, safeText(err.message || 'Failed to block day.'), true);
+      }
+    });
+
+    psychUnblockDayBtn.addEventListener('click', async () => {
+      const dateValue = String(psychBlockDate.value || '').trim();
+      if (!dateValue) {
+        setMessage(psychCalendarMsg, 'Choose a date to unblock.', true);
+        return;
+      }
+
+      try {
+        await api('/api/therapists/unblock-day', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ therapistType: 'psychiatrist', therapistId: resolvedPsychiatristId, date: dateValue }),
+        });
+        setMessage(psychCalendarMsg, 'Day unblocked successfully.', false);
+        await loadPsychCalendar();
+      } catch (err) {
+        setMessage(psychCalendarMsg, safeText(err.message || 'Failed to unblock day.'), true);
+      }
+    });
+
+    psychRiskForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const itemText = String(psychRiskInput.value || '').trim();
+      if (!itemText) {
+        setMessage(psychRiskMsg, 'Enter a risk item first.', true);
+        return;
+      }
+
+      try {
+        await api('/api/psychiatrist/risk-overview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ psychiatristId: resolvedPsychiatristId, itemText }),
+        });
+        psychRiskInput.value = '';
+        setMessage(psychRiskMsg, 'Risk item added.', false);
+        await loadRiskRows();
+      } catch (err) {
+        setMessage(psychRiskMsg, safeText(err.message || 'Failed to add risk item.'), true);
+      }
+    });
+
+    psychRiskList.addEventListener('click', async (event) => {
+      const saveId = event.target.getAttribute('data-risk-save');
+      const deleteId = event.target.getAttribute('data-risk-delete');
+      if (!saveId && !deleteId) return;
+
+      if (deleteId) {
+        try {
+          await api(`/api/psychiatrist/risk-overview/${encodeURIComponent(deleteId)}?psychiatristId=${encodeURIComponent(String(resolvedPsychiatristId))}`, {
+            method: 'DELETE',
+          });
+          setMessage(psychRiskMsg, 'Risk item deleted.', false);
+          await loadRiskRows();
+        } catch (err) {
+          setMessage(psychRiskMsg, safeText(err.message || 'Failed to delete risk item.'), true);
+        }
+        return;
+      }
+
+      if (saveId) {
+        const textInput = psychRiskList.querySelector(`[data-risk-text="${saveId}"]`);
+        const itemText = String(textInput?.value || '').trim();
+        if (!itemText) {
+          setMessage(psychRiskMsg, 'Risk item text cannot be empty.', true);
+          return;
+        }
+
+        try {
+          await api('/api/psychiatrist/risk-overview/' + encodeURIComponent(saveId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ psychiatristId: resolvedPsychiatristId, itemText }),
+          });
+          setMessage(psychRiskMsg, 'Risk item updated.', false);
+          await loadRiskRows();
+        } catch (err) {
+          setMessage(psychRiskMsg, safeText(err.message || 'Failed to update risk item.'), true);
+        }
+      }
+    });
+
+    psychNotesForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const noteText = String(psychNoteInput.value || '').trim();
+      const noteIdValue = String(psychNoteId.value || '').trim();
+      if (!noteText) {
+        setMessage(psychNotesMsg, 'Write a note before saving.', true);
+        return;
+      }
+
+      try {
+        if (noteIdValue) {
+          await api('/api/psychiatrist/notes/' + encodeURIComponent(noteIdValue), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ psychiatristId: resolvedPsychiatristId, noteText }),
+          });
+          setMessage(psychNotesMsg, 'Clinical note updated.', false);
+        } else {
+          await api('/api/psychiatrist/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ psychiatristId: resolvedPsychiatristId, noteText }),
+          });
+          setMessage(psychNotesMsg, 'Clinical note saved.', false);
+        }
+        resetNoteForm();
+        await loadNoteRows();
+      } catch (err) {
+        setMessage(psychNotesMsg, safeText(err.message || 'Failed to save note.'), true);
+      }
+    });
+
+    psychNoteReset.addEventListener('click', resetNoteForm);
+
+    psychNotesList.addEventListener('click', async (event) => {
+      const editId = event.target.getAttribute('data-note-edit');
+      const deleteId = event.target.getAttribute('data-note-delete');
+      if (!editId && !deleteId) return;
+
+      if (editId) {
+        const row = noteRows.find((item) => String(item.noteId) === String(editId));
+        if (!row) return;
+        psychNoteId.value = String(row.noteId);
+        psychNoteInput.value = row.noteText || '';
+        setMessage(psychNotesMsg, 'Editing note #' + row.noteId, false);
+        return;
+      }
+
+      if (deleteId) {
+        try {
+          await api(`/api/psychiatrist/notes/${encodeURIComponent(deleteId)}?psychiatristId=${encodeURIComponent(String(resolvedPsychiatristId))}`, {
+            method: 'DELETE',
+          });
+          setMessage(psychNotesMsg, 'Clinical note deleted.', false);
+          await loadNoteRows();
+        } catch (err) {
+          setMessage(psychNotesMsg, safeText(err.message || 'Failed to delete note.'), true);
+        }
+      }
+    });
+
+    psychCaseReportBtn.addEventListener('click', async () => {
+      try {
+        const payload = await api(`/api/psychiatrist/case-report?psychiatristId=${encodeURIComponent(String(resolvedPsychiatristId))}`);
+        const reportText = String(payload.reportText || '').trim();
+        if (!reportText) {
+          setMessage(psychCaseReportMsg, 'Case report generated but empty.', true);
+          return;
+        }
+
+        const blob = new Blob([reportText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `psychiatrist-case-report-${resolvedPsychiatristId}-${new Date().toISOString().slice(0, 10)}.txt`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+
+        setMessage(psychCaseReportMsg, 'Case report generated and downloaded.', false);
+      } catch (err) {
+        setMessage(psychCaseReportMsg, safeText(err.message || 'Failed to generate case report.'), true);
+      }
+    });
+
+    (async () => {
       let sessionUser = null;
       try {
         sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
@@ -256,10 +698,46 @@
         sessionUser = null;
       }
 
-      if (sessionUser && sessionUser.role === 'psychiatrist' && sessionUser.userId) {
-        await loadPsychBookedAppointments(sessionUser.userId);
-      } else if (psychAppointmentsList) {
-        psychAppointmentsList.innerHTML = '<li>Login as a psychiatrist to view booked appointments.</li>';
+      if (!sessionUser || sessionUser.role !== 'psychiatrist') {
+        window.location.href = '/account.html';
+        return;
+      }
+
+      psychBlockDate.value = toInputDate(new Date());
+
+      try {
+        resolvedPsychiatristId = await ensurePsychiatristId(sessionUser);
+      } catch (err) {
+        renderMessage(safeText(err.message || 'Failed to resolve psychiatrist profile ID.'));
+        if (psychAppointmentsList) psychAppointmentsList.innerHTML = '<li>Could not load appointments.</li>';
+        return;
+      }
+
+      if (!resolvedPsychiatristId) {
+        renderMessage('Could not resolve psychiatrist profile ID. Complete profile setup first.');
+        if (psychAppointmentsList) psychAppointmentsList.innerHTML = '<li>Could not load appointments.</li>';
+        return;
+      }
+
+      await loadPsychiatristAssignments();
+      const results = await Promise.allSettled([
+        loadPsychBookedAppointments(resolvedPsychiatristId),
+        loadPsychCalendar(),
+        loadRiskRows(),
+        loadNoteRows(),
+      ]);
+
+      if (results[0] && results[0].status === 'rejected' && psychAppointmentsList) {
+        psychAppointmentsList.innerHTML = '<li>' + safeText(results[0].reason?.message || 'Could not load appointments.') + '</li>';
+      }
+      if (results[1] && results[1].status === 'rejected' && psychCalendar) {
+        psychCalendar.innerHTML = '<p class="appointment-empty">' + safeText(results[1].reason?.message || 'Could not load calendar.') + '</p>';
+      }
+      if (results[2] && results[2].status === 'rejected') {
+        setMessage(psychRiskMsg, safeText(results[2].reason?.message || 'Could not load risk overview.'), true);
+      }
+      if (results[3] && results[3].status === 'rejected') {
+        setMessage(psychNotesMsg, safeText(results[3].reason?.message || 'Could not load notes.'), true);
       }
     })();
   </script>

@@ -39,22 +39,92 @@
 
   <main class="detail-main">
     <section class="detail-card">
-      <h1 class="detail-title">Wellness Resource</h1>
-      <p class="subtitle">Practical steps you can apply right away.</p>
+      <h1 id="resource-title" class="detail-title">Wellness Resource</h1>
+      <p id="resource-subtitle" class="subtitle">Practical steps you can apply right away.</p>
     </section>
 
     <section class="detail-card">
-      <h2>Practical Steps</h2>
-      <ol class="steps-list">
-        <li>Pause and take five slow breaths.</li>
-        <li>Write one stressful thought and one balanced response.</li>
-        <li>Take a 10-minute walk or stretch break.</li>
-        <li>Reach out to someone you trust if you need support.</li>
-      </ol>
+      <h2>In-depth Guide</h2>
+      <div id="resource-content" class="subtitle" style="white-space:pre-wrap; line-height:1.8; color:var(--text-soft);">Loading resource details...</div>
       <div class="modal-actions">
+        <a id="resource-source-link" class="btn-primary" href="#" target="_blank" rel="noreferrer noopener" style="display:none;">Open source link</a>
         <a class="btn-ghost-modal" href="/resources.html">Back to resources</a>
       </div>
     </section>
   </main>
+
+  <script>
+    const titleEl = document.getElementById('resource-title');
+    const subtitleEl = document.getElementById('resource-subtitle');
+    const contentEl = document.getElementById('resource-content');
+    const sourceLinkEl = document.getElementById('resource-source-link');
+
+    function safeText(value, fallback) {
+      const text = String(value || '').trim();
+      return text || String(fallback || '');
+    }
+
+    function getResourceIdFromQuery() {
+      const params = new URLSearchParams(window.location.search || '');
+      const id = Number(params.get('resourceId'));
+      if (!Number.isInteger(id) || id <= 0) return null;
+      return id;
+    }
+
+    function applyResource(resource) {
+      const title = safeText(resource?.title, 'Wellness Resource');
+      const category = safeText(resource?.category, 'General wellbeing');
+      const description = safeText(resource?.description, 'Helpful guidance for your wellbeing journey.');
+      const content = safeText(resource?.resourceContent, description);
+
+      document.title = `Tuliza - ${title}`;
+      titleEl.textContent = title;
+      subtitleEl.textContent = `${category}: ${description}`;
+      contentEl.textContent = content;
+      sourceLinkEl.style.display = 'none';
+    }
+
+    async function loadResourceFromList(resourceId) {
+      const response = await fetch('/api/resources');
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(safeText(payload.error, 'Could not load resources.'));
+
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      const match = rows.find((row) => Number(row.resourceId) === Number(resourceId));
+      if (!match) throw new Error('Resource not found.');
+
+      return match;
+    }
+
+    async function loadResourceDetail() {
+      const resourceId = getResourceIdFromQuery();
+      if (!resourceId) {
+        contentEl.textContent = 'Resource not found. Open a resource from the resources page.';
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/resources/${encodeURIComponent(String(resourceId))}`);
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const fallbackResource = await loadResourceFromList(resourceId);
+          applyResource(fallbackResource);
+          return;
+        }
+
+        applyResource(payload.resource || {});
+      } catch (_) {
+        try {
+          const fallbackResource = await loadResourceFromList(resourceId);
+          applyResource(fallbackResource);
+        } catch (innerErr) {
+          contentEl.textContent = safeText(innerErr?.message, 'Could not load resource details.');
+        }
+      }
+    }
+
+    loadResourceDetail();
+  </script>
 </body>
 </html>

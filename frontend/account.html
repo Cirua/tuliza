@@ -64,7 +64,16 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="login-password">Password</label>
-              <input class="form-input" id="login-password" required type="password" minlength="6" placeholder="At least 6 characters" />
+              <div class="password-field">
+                <input class="form-input" id="login-password" required type="password" minlength="6" placeholder="At least 6 characters" />
+                <button
+                  type="button"
+                  id="toggle-login-password"
+                  class="password-toggle"
+                  aria-label="Show password"
+                  aria-pressed="false"
+                >Show</button>
+              </div>
             </div>
             <p id="login-message" class="role-help-text" aria-live="polite"></p>
             <button class="btn-primary" type="submit">Login</button>
@@ -122,6 +131,8 @@
     const signupForm = document.getElementById('signup-form');
     const loginMessage = document.getElementById('login-message');
     const signupMessage = document.getElementById('signup-message');
+    const loginPasswordInput = document.getElementById('login-password');
+    const toggleLoginPasswordButton = document.getElementById('toggle-login-password');
 
     function enforceRoleChipAccess() {
       const chips = Array.from(document.querySelectorAll('.auth-role-preview .role-chip'));
@@ -166,6 +177,16 @@
 
     tabLogin.addEventListener('click', () => activateTab('login'));
     tabSignup.addEventListener('click', () => activateTab('signup'));
+
+    if (toggleLoginPasswordButton && loginPasswordInput) {
+      toggleLoginPasswordButton.addEventListener('click', () => {
+        const isHidden = loginPasswordInput.type === 'password';
+        loginPasswordInput.type = isHidden ? 'text' : 'password';
+        toggleLoginPasswordButton.textContent = isHidden ? 'Hide' : 'Show';
+        toggleLoginPasswordButton.setAttribute('aria-pressed', String(isHidden));
+        toggleLoginPasswordButton.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+      });
+    }
 
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
