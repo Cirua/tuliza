@@ -159,79 +159,8 @@
           </div>
         </div>
 
-        <section class="role-panel fade-up fade-up-delay-3" aria-label="Resources from database" style="margin-top:16px;">
-          <div class="role-panel-head">
-            <h2>Resources from database</h2>
-            <a class="btn-ghost-modal" href="/resources.html">Open resources page</a>
-          </div>
-          <div class="form-group" style="margin-bottom:12px;">
-            <label class="form-label" for="student-resource-search">Filter by category</label>
-            <input id="student-resource-search" class="form-input" type="text" placeholder="e.g. anxiety, sleep, exams" />
-          </div>
-          <div class="role-table-wrap">
-            <table class="role-table" aria-label="Student resources table">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Category</th>
-                  <th>Description</th>
-                  <th>Link</th>
-                </tr>
-              </thead>
-              <tbody id="student-resources-body">
-                <tr>
-                  <td colspan="4">Loading resources...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
       </main>
 
-    </div>
-  </div>
-
-
-  <div class="modal-overlay" id="booking-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="booking-title">
-    <div class="modal">
-      <div class="modal-header">
-        <div class="modal-eyebrow">In-person session</div>
-        <h2 class="modal-title" id="booking-title">Book a therapy session</h2>
-        <p class="modal-subtitle">Your details are used only to confirm your appointment and are never shared publicly.</p>
-      </div>
-
-      <div class="modal-notice">
-        Private: This is the only step where your identity is collected. Anonymous chat remains available without any details.
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="b-name">Full name</label>
-        <input class="form-input" id="b-name" type="text" placeholder="e.g. Jane Mwangi" />
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="b-email">Strathmore email</label>
-        <input class="form-input" id="b-email" type="email" placeholder="you@strathmore.edu" />
-        <p class="form-hint">Used to send your confirmation only.</p>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label" for="b-phone">Phone number</label>
-        <input class="form-input" id="b-phone" type="tel" placeholder="+254 7XX XXX XXX" />
-      </div>
-
-      
-
-      <div class="form-group">
-        <label class="form-label" for="b-notes">What would you like to talk about? (optional)</label>
-        <textarea class="form-textarea" id="b-notes" placeholder="A brief note helps the therapist prepare..."></textarea>
-      </div>
-
-      <div class="modal-actions">
-        <a class="btn-ghost-modal" href="/student.html">Cancel</a>
-        <button class="btn-primary">Continue to payment -&gt;</button>
-      </div>
     </div>
   </div>
 
@@ -387,83 +316,6 @@
       }
     }
 
-    async function loadStudentResourcesTable() {
-      const body = document.getElementById('student-resources-body');
-      if (!body) return;
-
-      const searchInput = document.getElementById('student-resource-search');
-
-      const renderRows = (rows, query) => {
-        const normalizedQuery = String(query || '').trim().toLowerCase();
-        const filteredRows = normalizedQuery
-          ? rows.filter((row) => String(row.category || '').toLowerCase().includes(normalizedQuery))
-          : rows;
-
-        if (!filteredRows.length) {
-          body.innerHTML = '<tr><td colspan="4">No resources match this category.</td></tr>';
-          return;
-        }
-
-        body.innerHTML = '';
-        filteredRows.forEach((row) => {
-          const tr = document.createElement('tr');
-
-          const title = document.createElement('td');
-          title.textContent = String(row.title || '-');
-
-          const category = document.createElement('td');
-          category.textContent = String(row.category || '-');
-
-          const description = document.createElement('td');
-          description.textContent = String(row.description || '-');
-
-          const link = document.createElement('td');
-          if (row.fileLink) {
-            const anchor = document.createElement('a');
-            anchor.href = String(row.fileLink);
-            anchor.target = '_blank';
-            anchor.rel = 'noreferrer';
-            anchor.textContent = 'Open';
-            link.appendChild(anchor);
-          } else {
-            link.textContent = '-';
-          }
-
-          tr.appendChild(title);
-          tr.appendChild(category);
-          tr.appendChild(description);
-          tr.appendChild(link);
-          body.appendChild(tr);
-        });
-      };
-
-      try {
-        const response = await fetch('/api/resources');
-        const payload = await response.json().catch(() => ({}));
-
-        if (!response.ok) {
-          body.innerHTML = '<tr><td colspan="4">' + (payload.error || 'Failed to load resources.') + '</td></tr>';
-          return;
-        }
-
-        const rows = Array.isArray(payload.rows) ? payload.rows : [];
-        if (!rows.length) {
-          body.innerHTML = '<tr><td colspan="4">No resources available yet.</td></tr>';
-          return;
-        }
-
-        if (searchInput) {
-          searchInput.addEventListener('input', () => {
-            renderRows(rows, searchInput.value);
-          });
-        }
-
-        renderRows(rows, searchInput ? searchInput.value : '');
-      } catch (_) {
-        body.innerHTML = '<tr><td colspan="4">Could not reach server.</td></tr>';
-      }
-    }
-
     function initializeStudentDashboardInteractions() {
       const moodButtons = Array.from(document.querySelectorAll('.mood-btn'));
       const summaryMood = document.getElementById('summary-mood');
@@ -525,10 +377,7 @@
           return;
         }
 
-        const fallbackModal = document.getElementById('booking-modal');
-        if (fallbackModal) {
-          fallbackModal.style.display = 'flex';
-        }
+        window.alert('Booking widget is still loading. Please wait a moment and try again.');
       };
 
       if (bookAction) {
@@ -562,7 +411,6 @@
     }
 
     loadAssignedSupportProfile();
-    loadStudentResourcesTable();
     initializeStudentDashboardInteractions();
   </script>
 

@@ -82,24 +82,47 @@
 
       <aside class="role-stack">
         <article class="role-panel">
-          <h3>Upcoming booked appointments</h3>
-          <ul id="mentor-appointments-list" class="role-list">
+          <h3>Appointments calendar</h3>
+          <p class="role-help-text">Publish your available slots so students can book sessions.</p>
+          <form id="mentor-availability-form" class="role-inline-actions" style="margin-bottom:12px; flex-wrap:wrap;">
+            <input id="mentor-availability-start" class="form-input" type="datetime-local" />
+            <input id="mentor-availability-end" class="form-input" type="datetime-local" />
+            <button class="btn-primary" type="submit">Add slot</button>
+          </form>
+          <p id="mentor-availability-msg" class="role-help-text"></p>
+          <div id="mentor-calendar" class="appointment-calendar">
+            <p class="appointment-empty">Loading calendar...</p>
+          </div>
+          <h3 style="margin-top:14px;">Upcoming booked appointments</h3>
+          <ul id="mentor-booked-list" class="role-list">
             <li>Loading booked appointments...</li>
           </ul>
         </article>
         <article class="role-panel">
           <h3>Follow-up checklist</h3>
-          <ul class="role-list">
-            <li>Send coping plan to CalmOrbit_33</li>
-            <li>Confirm Friday group reflection room</li>
-            <li>Review low-engagement students</li>
-            <li>Share sleep routine resource pack</li>
+          <form id="mentor-checklist-form" class="role-inline-actions" style="margin-bottom:12px;">
+            <input id="mentor-checklist-input" class="form-input" type="text" placeholder="Add checklist item..." maxlength="500" />
+            <button class="btn-primary" type="submit">Add</button>
+          </form>
+          <p id="mentor-checklist-msg" class="role-help-text"></p>
+          <ul id="mentor-checklist-list" class="role-list">
+            <li>Loading checklist...</li>
           </ul>
         </article>
         <article class="role-panel">
-          <h3>Quick notes</h3>
-          <textarea class="form-textarea" placeholder="Write session highlights and next steps..."></textarea>
-          <button class="btn-primary" type="button" style="margin-top:12px;">Save note</button>
+          <h3>Mentor notes</h3>
+          <form id="mentor-notes-form">
+            <input id="mentor-note-id" type="hidden" />
+            <textarea id="mentor-note-input" class="form-textarea" placeholder="Write session highlights and next steps..."></textarea>
+            <div class="role-inline-actions" style="margin-top:12px;">
+              <button class="btn-primary" type="submit">Save note</button>
+              <button id="mentor-note-reset" class="btn-ghost-modal" type="button">Clear</button>
+            </div>
+          </form>
+          <p id="mentor-notes-msg" class="role-help-text"></p>
+          <ul id="mentor-notes-list" class="role-list" style="margin-top:12px;">
+            <li>Loading notes...</li>
+          </ul>
         </article>
       </aside>
     </section>
@@ -110,7 +133,28 @@
     const mentorKpiAssigned = document.getElementById('mentor-kpi-assigned');
     const mentorKpiNewest = document.getElementById('mentor-kpi-newest');
     const mentorKpiUncontacted = document.getElementById('mentor-kpi-uncontacted');
-    const mentorAppointmentsList = document.getElementById('mentor-appointments-list');
+    const mentorCalendar = document.getElementById('mentor-calendar');
+    const mentorAvailabilityForm = document.getElementById('mentor-availability-form');
+    const mentorAvailabilityStart = document.getElementById('mentor-availability-start');
+    const mentorAvailabilityEnd = document.getElementById('mentor-availability-end');
+    const mentorAvailabilityMsg = document.getElementById('mentor-availability-msg');
+    const mentorBookedList = document.getElementById('mentor-booked-list');
+
+    const mentorChecklistForm = document.getElementById('mentor-checklist-form');
+    const mentorChecklistInput = document.getElementById('mentor-checklist-input');
+    const mentorChecklistList = document.getElementById('mentor-checklist-list');
+    const mentorChecklistMsg = document.getElementById('mentor-checklist-msg');
+
+    const mentorNotesForm = document.getElementById('mentor-notes-form');
+    const mentorNoteIdInput = document.getElementById('mentor-note-id');
+    const mentorNoteInput = document.getElementById('mentor-note-input');
+    const mentorNoteReset = document.getElementById('mentor-note-reset');
+    const mentorNotesList = document.getElementById('mentor-notes-list');
+    const mentorNotesMsg = document.getElementById('mentor-notes-msg');
+
+    let resolvedMentorId = null;
+    let checklistRows = [];
+    let notesRows = [];
     const logoutBtn = document.getElementById('logout-btn');
 
     if (logoutBtn) {
@@ -180,6 +224,231 @@
       mentorKpiUncontacted.textContent = '0';
     }
 
+    async function api(url, options) {
+      let response;
+      try {
+        response = await fetch(url, options);
+      } catch (_) {
+        throw new Error('Could not reach server.');
+      }
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const fallback = `${response.status} ${response.statusText || 'Request failed'}`;
+        throw new Error(payload.error || fallback);
+      }
+      return payload;
+    }
+
+    function setChecklistMessage(message, isError) {
+      if (!mentorChecklistMsg) return;
+      mentorChecklistMsg.textContent = message || '';
+      mentorChecklistMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function setNotesMessage(message, isError) {
+      if (!mentorNotesMsg) return;
+      mentorNotesMsg.textContent = message || '';
+      mentorNotesMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function setAvailabilityMessage(message, isError) {
+      if (!mentorAvailabilityMsg) return;
+      mentorAvailabilityMsg.textContent = message || '';
+      mentorAvailabilityMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function formatDateTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    function toInputDateTimeValue(date) {
+      const d = new Date(date);
+      if (Number.isNaN(d.getTime())) return '';
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
+    function initializeAvailabilityDefaults() {
+      const now = new Date();
+      now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0);
+      const oneHourLater = new Date(now.getTime() + (60 * 60 * 1000));
+
+      if (mentorAvailabilityStart && !mentorAvailabilityStart.value) {
+        mentorAvailabilityStart.value = toInputDateTimeValue(now);
+      }
+      if (mentorAvailabilityEnd && !mentorAvailabilityEnd.value) {
+        mentorAvailabilityEnd.value = toInputDateTimeValue(oneHourLater);
+      }
+    }
+
+    function resolveSessionMentorId(sessionUser) {
+      if (!sessionUser) return null;
+      const role = String(sessionUser.role || '').toLowerCase();
+      if (role !== 'mentor') return null;
+
+      const userId = Number(sessionUser.userId);
+      if (Number.isInteger(userId) && userId > 0) return userId;
+
+      const signupId = Number(sessionUser.signupId);
+      if (Number.isInteger(signupId) && signupId > 0) return signupId;
+
+      return null;
+    }
+
+    async function ensureMentorId(sessionUser) {
+      const direct = resolveSessionMentorId(sessionUser);
+      if (direct) {
+        const response = await fetch(`/api/users/resolve-id?role=mentor&identifier=${encodeURIComponent(String(direct))}`);
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload.userId) return Number(payload.userId);
+      }
+
+      const email = String(sessionUser?.email || '').trim();
+      if (email) {
+        const response = await fetch(`/api/users/resolve-id?role=mentor&identifier=${encodeURIComponent(email)}`);
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload.userId) return Number(payload.userId);
+      }
+
+      return null;
+    }
+
+    function renderChecklist() {
+      if (!mentorChecklistList) return;
+      mentorChecklistList.innerHTML = '';
+
+      if (!checklistRows.length) {
+        mentorChecklistList.innerHTML = '<li>No checklist items yet.</li>';
+        return;
+      }
+
+      checklistRows.forEach((row) => {
+        const li = document.createElement('li');
+        li.className = 'role-list-item';
+        const checkedAttr = row.isDone ? 'checked' : '';
+        li.innerHTML = `
+          <div style="display:flex; align-items:center; gap:10px; width:100%;">
+            <input type="checkbox" data-checklist-toggle="${row.itemId}" ${checkedAttr} />
+            <input class="form-input" data-checklist-text="${row.itemId}" value="${row.itemText.replace(/"/g, '&quot;')}" />
+          </div>
+          <div class="role-inline-actions">
+            <button class="role-mini-btn" type="button" data-checklist-save="${row.itemId}">Save</button>
+            <button class="role-mini-btn" type="button" data-checklist-delete="${row.itemId}">Delete</button>
+          </div>
+        `;
+        mentorChecklistList.appendChild(li);
+      });
+    }
+
+    async function loadChecklist() {
+      if (!resolvedMentorId) return;
+      const payload = await api(`/api/mentor/checklist?mentorId=${encodeURIComponent(String(resolvedMentorId))}`);
+      checklistRows = Array.isArray(payload.rows) ? payload.rows : [];
+      renderChecklist();
+    }
+
+    function resetNoteForm() {
+      mentorNoteIdInput.value = '';
+      mentorNoteInput.value = '';
+      setNotesMessage('', false);
+    }
+
+    function renderNotes() {
+      if (!mentorNotesList) return;
+      mentorNotesList.innerHTML = '';
+
+      if (!notesRows.length) {
+        mentorNotesList.innerHTML = '<li>No notes yet.</li>';
+        return;
+      }
+
+      notesRows.forEach((row) => {
+        const li = document.createElement('li');
+        li.className = 'role-list-item';
+        li.innerHTML = `
+          <div>
+            <p style="white-space:pre-wrap; color:var(--text);">${safeText(row.noteText)}</p>
+            <p class="role-help-text">Updated: ${formatDateTime(row.updatedAt)}</p>
+          </div>
+          <div class="role-inline-actions">
+            <button class="role-mini-btn" type="button" data-note-edit="${row.noteId}">Edit</button>
+            <button class="role-mini-btn" type="button" data-note-delete="${row.noteId}">Delete</button>
+          </div>
+        `;
+        mentorNotesList.appendChild(li);
+      });
+    }
+
+    async function loadNotes() {
+      if (!resolvedMentorId) return;
+      const payload = await api(`/api/mentor/notes?mentorId=${encodeURIComponent(String(resolvedMentorId))}`);
+      notesRows = Array.isArray(payload.rows) ? payload.rows : [];
+      renderNotes();
+    }
+
+    function renderCalendar(slots) {
+      if (!mentorCalendar) return;
+      mentorCalendar.innerHTML = '';
+
+      if (!slots.length) {
+        mentorCalendar.innerHTML = '<p class="appointment-empty">No availability slots found yet.</p>';
+        return;
+      }
+
+      const byDate = new Map();
+      slots.forEach((slot) => {
+        const dateKey = new Date(slot.startAt).toLocaleDateString();
+        if (!byDate.has(dateKey)) byDate.set(dateKey, []);
+        byDate.get(dateKey).push(slot);
+      });
+
+      byDate.forEach((daySlots, dateKey) => {
+        const card = document.createElement('div');
+        card.className = 'appointment-day-card';
+
+        const title = document.createElement('h3');
+        title.textContent = dateKey;
+        card.appendChild(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'slot-grid';
+
+        daySlots.forEach((slot) => {
+          const start = new Date(slot.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const end = new Date(slot.endAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = `slot-chip ${slot.status === 'available' ? 'is-available' : 'is-unavailable'}`;
+          chip.textContent = `${start} - ${end} (${slot.status})`;
+
+          if (slot.status === 'available') {
+            chip.setAttribute('data-delete-slot', String(slot.availabilityId));
+            chip.title = 'Click to remove this available slot';
+          } else {
+            chip.disabled = true;
+          }
+
+          grid.appendChild(chip);
+        });
+
+        card.appendChild(grid);
+        mentorCalendar.appendChild(card);
+      });
+    }
+
+    async function loadMentorCalendar() {
+      if (!resolvedMentorId) return;
+      const payload = await api(`/api/mentor/calendar?mentorId=${encodeURIComponent(String(resolvedMentorId))}&days=30`);
+      renderCalendar(Array.isArray(payload.slots) ? payload.slots : []);
+    }
+
     async function loadMentorAssignments() {
       let sessionUser = null;
       try {
@@ -220,7 +489,7 @@
     }
 
     async function loadMentorBookedAppointments(therapistId) {
-      if (!mentorAppointmentsList) return;
+      if (!mentorBookedList) return;
 
       try {
         const response = await fetch(`/api/appointments/booked?therapistType=mentor&therapistId=${encodeURIComponent(String(therapistId))}&days=30`);
@@ -230,22 +499,186 @@
         }
 
         if (!result.appointments.length) {
-          mentorAppointmentsList.innerHTML = '<li>No upcoming booked appointments.</li>';
+          mentorBookedList.innerHTML = '<li>No upcoming booked appointments.</li>';
           return;
         }
 
-        mentorAppointmentsList.innerHTML = result.appointments.map((appt) => {
+        mentorBookedList.innerHTML = result.appointments.map((appt) => {
           const start = new Date(appt.slotStart).toLocaleString();
-          return `<li><strong>${appt.studentName}</strong> (${appt.studentId}) - ${start}</li>`;
+          return `<li><strong>${safeText(appt.studentName)}</strong> (${safeText(appt.studentId)}) - ${safeText(start)}</li>`;
         }).join('');
       } catch (err) {
-        mentorAppointmentsList.innerHTML = `<li>${safeText(err.message || 'Failed to load booked appointments.')}</li>`;
+        mentorBookedList.innerHTML = `<li>${safeText(err.message || 'Failed to load booked appointments.')}</li>`;
       }
     }
 
-    (async () => {
-      await loadMentorAssignments();
+    mentorAvailabilityForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const startAt = String(mentorAvailabilityStart?.value || '').trim();
+      const endAt = String(mentorAvailabilityEnd?.value || '').trim();
 
+      if (!startAt || !endAt) {
+        setAvailabilityMessage('Select both start and end date/time.', true);
+        return;
+      }
+
+      try {
+        await api('/api/mentor/availability', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mentorId: resolvedMentorId, startAt, endAt }),
+        });
+        setAvailabilityMessage('Availability slot added.', false);
+        await Promise.all([loadMentorCalendar(), loadMentorBookedAppointments(resolvedMentorId)]);
+      } catch (err) {
+        setAvailabilityMessage(safeText(err.message || 'Failed to add availability slot.'), true);
+      }
+    });
+
+    mentorCalendar.addEventListener('click', async (event) => {
+      const slotId = event.target.getAttribute('data-delete-slot');
+      if (!slotId) return;
+
+      if (!window.confirm('Remove this available slot?')) return;
+      try {
+        await api(`/api/mentor/availability/${encodeURIComponent(slotId)}?mentorId=${encodeURIComponent(String(resolvedMentorId))}`, {
+          method: 'DELETE',
+        });
+        setAvailabilityMessage('Availability slot removed.', false);
+        await Promise.all([loadMentorCalendar(), loadMentorBookedAppointments(resolvedMentorId)]);
+      } catch (err) {
+        setAvailabilityMessage(safeText(err.message || 'Failed to remove availability slot.'), true);
+      }
+    });
+
+    mentorChecklistForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const itemText = String(mentorChecklistInput.value || '').trim();
+      if (!itemText) {
+        setChecklistMessage('Enter a checklist item first.', true);
+        return;
+      }
+
+      try {
+        await api('/api/mentor/checklist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mentorId: resolvedMentorId, itemText }),
+        });
+        mentorChecklistInput.value = '';
+        setChecklistMessage('Checklist item added.', false);
+        await loadChecklist();
+      } catch (err) {
+        setChecklistMessage(safeText(err.message || 'Failed to add checklist item.'), true);
+      }
+    });
+
+    mentorChecklistList.addEventListener('click', async (event) => {
+      const saveId = event.target.getAttribute('data-checklist-save');
+      const deleteId = event.target.getAttribute('data-checklist-delete');
+      if (!saveId && !deleteId) return;
+
+      if (deleteId) {
+        try {
+          await api(`/api/mentor/checklist/${encodeURIComponent(deleteId)}?mentorId=${encodeURIComponent(String(resolvedMentorId))}`, {
+            method: 'DELETE',
+          });
+          setChecklistMessage('Checklist item deleted.', false);
+          await loadChecklist();
+        } catch (err) {
+          setChecklistMessage(safeText(err.message || 'Failed to delete checklist item.'), true);
+        }
+        return;
+      }
+
+      if (saveId) {
+        const textInput = mentorChecklistList.querySelector(`[data-checklist-text="${saveId}"]`);
+        const toggleInput = mentorChecklistList.querySelector(`[data-checklist-toggle="${saveId}"]`);
+        const itemText = String(textInput?.value || '').trim();
+        const isDone = Boolean(toggleInput?.checked);
+
+        if (!itemText) {
+          setChecklistMessage('Checklist text cannot be empty.', true);
+          return;
+        }
+
+        try {
+          await api('/api/mentor/checklist/' + encodeURIComponent(saveId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mentorId: resolvedMentorId, itemText, isDone }),
+          });
+          setChecklistMessage('Checklist item updated.', false);
+          await loadChecklist();
+        } catch (err) {
+          setChecklistMessage(safeText(err.message || 'Failed to update checklist item.'), true);
+        }
+      }
+    });
+
+    mentorNotesForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const noteText = String(mentorNoteInput.value || '').trim();
+      const noteId = String(mentorNoteIdInput.value || '').trim();
+
+      if (!noteText) {
+        setNotesMessage('Write a note before saving.', true);
+        return;
+      }
+
+      try {
+        if (noteId) {
+          await api('/api/mentor/notes/' + encodeURIComponent(noteId), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mentorId: resolvedMentorId, noteText }),
+          });
+          setNotesMessage('Note updated.', false);
+        } else {
+          await api('/api/mentor/notes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mentorId: resolvedMentorId, noteText }),
+          });
+          setNotesMessage('Note saved.', false);
+        }
+        resetNoteForm();
+        await loadNotes();
+      } catch (err) {
+        setNotesMessage(safeText(err.message || 'Failed to save note.'), true);
+      }
+    });
+
+    mentorNoteReset.addEventListener('click', resetNoteForm);
+
+    mentorNotesList.addEventListener('click', async (event) => {
+      const editId = event.target.getAttribute('data-note-edit');
+      const deleteId = event.target.getAttribute('data-note-delete');
+      if (!editId && !deleteId) return;
+
+      if (editId) {
+        const row = notesRows.find((note) => String(note.noteId) === String(editId));
+        if (!row) return;
+        mentorNoteIdInput.value = String(row.noteId);
+        mentorNoteInput.value = row.noteText || '';
+        setNotesMessage('Editing note #' + row.noteId, false);
+        return;
+      }
+
+      if (deleteId) {
+        try {
+          await api(`/api/mentor/notes/${encodeURIComponent(deleteId)}?mentorId=${encodeURIComponent(String(resolvedMentorId))}`, {
+            method: 'DELETE',
+          });
+          setNotesMessage('Note deleted.', false);
+          await loadNotes();
+        } catch (err) {
+          setNotesMessage(safeText(err.message || 'Failed to delete note.'), true);
+        }
+      }
+    });
+
+    (async () => {
       let sessionUser = null;
       try {
         sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
@@ -253,10 +686,38 @@
         sessionUser = null;
       }
 
-      if (sessionUser && sessionUser.role === 'mentor' && sessionUser.userId) {
-        await loadMentorBookedAppointments(sessionUser.userId);
-      } else if (mentorAppointmentsList) {
-        mentorAppointmentsList.innerHTML = '<li>Login as a mentor to view booked appointments.</li>';
+      if (!sessionUser || sessionUser.role !== 'mentor') {
+        window.location.href = '/account.html';
+        return;
+      }
+
+      initializeAvailabilityDefaults();
+
+      resolvedMentorId = await ensureMentorId(sessionUser);
+      if (!resolvedMentorId) {
+        renderMessage('Could not resolve mentor profile ID. Complete profile setup first.');
+        if (mentorCalendar) mentorCalendar.innerHTML = '<p class="appointment-empty">Could not load calendar.</p>';
+        return;
+      }
+
+      await loadMentorAssignments();
+
+      const results = await Promise.allSettled([
+        loadMentorBookedAppointments(resolvedMentorId),
+        loadMentorCalendar(),
+        loadChecklist(),
+        loadNotes(),
+      ]);
+
+      if (results[1] && results[1].status === 'rejected' && mentorCalendar) {
+        const message = safeText(results[1].reason?.message || 'Failed to load mentor calendar.');
+        mentorCalendar.innerHTML = `<p class="appointment-empty">${message}</p>`;
+      }
+      if (results[2] && results[2].status === 'rejected') {
+        setChecklistMessage(safeText(results[2].reason?.message || 'Failed to load checklist.'), true);
+      }
+      if (results[3] && results[3].status === 'rejected') {
+        setNotesMessage(safeText(results[3].reason?.message || 'Failed to load notes.'), true);
       }
     })();
   </script>

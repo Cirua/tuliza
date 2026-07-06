@@ -76,8 +76,11 @@
     const journalTitle = document.getElementById('journal-title');
     const journalMood = document.getElementById('journal-mood');
     const historyList = document.getElementById('journal-history-list');
+    const editorLabel = document.querySelector('.editor .toolbar strong');
 
     let resolvedStudentId = null;
+    let editingJournalId = null;
+    let historyEntries = [];
 
     function updateDateLabel() {
       const now = new Date();
@@ -156,13 +159,14 @@
 
     function renderHistory(entries) {
       if (!historyList) return;
+      historyEntries = Array.isArray(entries) ? entries : [];
 
-      if (!entries.length) {
+      if (!historyEntries.length) {
         historyList.innerHTML = '<p class="journal-history-empty">No journal entries yet. Write your first one above.</p>';
         return;
       }
 
-      historyList.innerHTML = entries.map((entry) => {
+      historyList.innerHTML = historyEntries.map((entry) => {
         const moodText = entry.mood ? `<span class="journal-entry-mood">${escapeHtml(entry.mood)}</span>` : '';
         const title = escapeHtml(entry.title || 'Untitled entry');
         const body = escapeHtml(entry.journalEntry || '').replace(/\n/g, '<br>');
@@ -175,9 +179,36 @@
             </div>
             ${moodText}
             <p>${body}</p>
+            <div class="role-inline-actions" style="margin-top:10px;">
+              <button class="role-mini-btn" type="button" data-journal-edit="${entry.journalId}">Edit</button>
+              <button class="role-mini-btn" type="button" data-journal-delete="${entry.journalId}">Delete</button>
+            </div>
           </article>
         `;
       }).join('');
+    }
+
+    function resetEditor() {
+      editingJournalId = null;
+      journalTitle.value = '';
+      journalMood.value = '';
+      journalInput.value = '';
+      updateWordCount();
+      if (saveButton) saveButton.textContent = 'Save entry';
+      if (editorLabel) editorLabel.textContent = 'New entry';
+    }
+
+    function startEditing(entry) {
+      if (!entry) return;
+      editingJournalId = Number(entry.journalId);
+      journalTitle.value = String(entry.title || '').trim() === 'Untitled entry' ? '' : String(entry.title || '');
+      journalMood.value = String(entry.mood || '').trim();
+      journalInput.value = String(entry.journalEntry || '');
+      updateWordCount();
+      if (saveButton) saveButton.textContent = 'Update entry';
+      if (editorLabel) editorLabel.textContent = 'Edit entry';
+      journalInput.focus();
+      journalInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     async function loadHistory() {
@@ -211,11 +242,16 @@
       }
 
       saveButton.disabled = true;
-      journalFeedback.textContent = 'Saving entry...';
+      journalFeedback.textContent = editingJournalId ? 'Updating entry...' : 'Saving entry...';
 
       try {
-        const response = await fetch('/api/journal', {
-          method: 'POST',
+        const endpoint = editingJournalId
+          ? '/api/journal/' + encodeURIComponent(String(editingJournalId))
+          : '/api/journal';
+        const method = editingJournalId ? 'PUT' : 'POST';
+
+        const response = await fetch(endpoint, {
+          method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId: resolvedStudentId, title, mood, journalEntry }),
         });
@@ -226,11 +262,8 @@
           return;
         }
 
-        journalInput.value = '';
-        journalTitle.value = '';
-        journalMood.value = '';
-        updateWordCount();
-        journalFeedback.textContent = 'Journal entry saved.';
+        journalFeedback.textContent = editingJournalId ? 'Journal entry updated.' : 'Journal entry saved.';
+        resetEditor();
         await loadHistory();
       } catch (_) {
         journalFeedback.textContent = 'Could not reach server.';
@@ -239,8 +272,48 @@
       }
     }
 
+    async function deleteEntry(journalId) {
+      if (!resolvedStudentId || !journalId) return;
+
+      const response = await fetch(
+        '/api/journal/' + encodeURIComponent(String(journalId)) + '?studentId=' + encodeURIComponent(String(resolvedStudentId)),
+        { method: 'DELETE' }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Failed to delete journal entry.');
+      }
+    }
+
     journalInput.addEventListener('input', updateWordCount);
     saveButton.addEventListener('click', saveEntry);
+
+    historyList.addEventListener('click', async (event) => {
+      const editId = event.target.getAttribute('data-journal-edit');
+      const deleteId = event.target.getAttribute('data-journal-delete');
+      if (!editId && !deleteId) return;
+
+      if (editId) {
+        const entry = historyEntries.find((item) => String(item.journalId) === String(editId));
+        startEditing(entry);
+        journalFeedback.textContent = 'Editing previous entry.';
+        return;
+      }
+
+      if (deleteId) {
+        if (!window.confirm('Delete this journal entry?')) return;
+        try {
+          await deleteEntry(deleteId);
+          if (String(editingJournalId) === String(deleteId)) {
+            resetEditor();
+          }
+          journalFeedback.textContent = 'Journal entry deleted.';
+          await loadHistory();
+        } catch (err) {
+          journalFeedback.textContent = err.message || 'Failed to delete journal entry.';
+        }
+      }
+    });
 
     (async () => {
       updateDateLabel();

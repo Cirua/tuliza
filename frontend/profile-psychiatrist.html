@@ -110,17 +110,28 @@
         yearsOfExperience: document.getElementById('yearsOfExperience').value.trim(),
         billingDetails: document.getElementById('billingDetails').value.trim(),
       };
-      const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMessage(data.error || 'Failed to save profile', true);
-        return;
+      try {
+        const res = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setMessage(data.error || 'Failed to save profile', true);
+          return;
+        }
+        if (data.sessionToken) {
+          sessionStorage.setItem('tuliza_session_token', data.sessionToken);
+        }
+        sessionStorage.setItem(
+          'tuliza_session_user',
+          JSON.stringify({ ...sessionUser, userId: data.userId, role: data.role, signupId: data.signupId })
+        );
+        window.location.href = data.redirectTo || 'psychologist.html';
+      } catch (_) {
+        setMessage('Could not reach server.', true);
       }
-      if (data.sessionToken) {
-        sessionStorage.setItem('tuliza_session_token', data.sessionToken);
-      }
-      sessionStorage.setItem('tuliza_session_user', JSON.stringify({ ...sessionUser, userId: data.userId, role: data.role, signupId: data.signupId }));
-      window.location.href = data.redirectTo || 'psychologist.html';
     });
 
     deleteBtn.addEventListener('click', async () => {

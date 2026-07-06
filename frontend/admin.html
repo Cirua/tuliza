@@ -107,7 +107,7 @@
           <div class="form-group"><label class="form-label" for="resource-title">Title</label><input id="resource-title" class="form-input" required /></div>
           <div class="form-group"><label class="form-label" for="resource-category">Category</label><input id="resource-category" class="form-input" /></div>
           <div class="form-group"><label class="form-label" for="resource-description">Description</label><textarea id="resource-description" class="form-textarea"></textarea></div>
-          <div class="form-group"><label class="form-label" for="resource-link">File link</label><input id="resource-link" class="form-input" /></div>
+          <div class="form-group"><label class="form-label" for="resource-content">In-depth information</label><textarea id="resource-content" class="form-textarea" rows="8" placeholder="Add detailed guidance, steps, examples, and when to seek additional support..."></textarea></div>
           <div class="modal-actions">
             <button class="btn-primary" type="submit">Save resource</button>
             <button id="resource-reset" class="btn-ghost-modal" type="button">Clear</button>
@@ -121,7 +121,6 @@
                 <th>ID</th>
                 <th>Title</th>
                 <th>Category</th>
-                <th>Link</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -158,6 +157,7 @@
           </table>
         </div>
       </article>
+
     </section>
   </main>
 
@@ -173,7 +173,7 @@
     const resourceTitleInput = document.getElementById('resource-title');
     const resourceCategoryInput = document.getElementById('resource-category');
     const resourceDescriptionInput = document.getElementById('resource-description');
-    const resourceLinkInput = document.getElementById('resource-link');
+    const resourceContentInput = document.getElementById('resource-content');
     const resourceResetBtn = document.getElementById('resource-reset');
     const resourceMsg = document.getElementById('resource-msg');
 
@@ -221,12 +221,13 @@
       contactMsg.style.color = isError ? '#B42318' : '#146C43';
     }
 
+
     function resetResourceForm() {
       resourceIdInput.value = '';
       resourceTitleInput.value = '';
       resourceCategoryInput.value = '';
       resourceDescriptionInput.value = '';
-      resourceLinkInput.value = '';
+      resourceContentInput.value = '';
       setResourceMessage('', false);
     }
 
@@ -236,6 +237,7 @@
       contactPhoneInput.value = '';
       setContactMessage('', false);
     }
+
 
     function renderUsers(rows) {
       usersBody.innerHTML = '';
@@ -277,10 +279,18 @@
       });
     }
 
+    function applyStatsToKpis(stats) {
+      const computed = stats?.computed || {};
+      kpiStudents.textContent = String(computed.totalStudents ?? 0);
+      kpiMentors.textContent = String(computed.mentorsActive ?? 0);
+      kpiPsychiatrists.textContent = String(computed.psychiatristsActive ?? 0);
+      kpiAssignments.textContent = String(computed.assignmentsActive ?? 0);
+    }
+
     function renderResources() {
       resourcesBody.innerHTML = '';
       if (!resourceRows.length) {
-        resourcesBody.innerHTML = '<tr><td colspan="5">No resources found.</td></tr>';
+        resourcesBody.innerHTML = '<tr><td colspan="4">No resources found.</td></tr>';
         return;
       }
 
@@ -290,7 +300,6 @@
           <td>${safeText(row.resourceId)}</td>
           <td>${safeText(row.title)}</td>
           <td>${safeText(row.category)}</td>
-          <td>${row.fileLink ? `<a href="${row.fileLink}" target="_blank" rel="noreferrer">Open</a>` : '-'}</td>
           <td>
             <button class="role-mini-btn" type="button" data-resource-edit="${row.resourceId}">Edit</button>
             <button class="role-mini-btn" type="button" data-resource-delete="${row.resourceId}">Delete</button>
@@ -330,10 +339,7 @@
       renderUsers(users);
       renderAssignments(assignments);
 
-      kpiStudents.textContent = String(users.filter((u) => u.role === 'student').length);
-      kpiMentors.textContent = String(users.filter((u) => u.role === 'mentor').length);
-      kpiPsychiatrists.textContent = String(users.filter((u) => u.role === 'psychiatrist').length);
-      kpiAssignments.textContent = String(assignments.length);
+      applyStatsToKpis(payload.stats || null);
     }
 
     async function loadResources() {
@@ -365,7 +371,7 @@
         resourceTitleInput.value = row.title || '';
         resourceCategoryInput.value = row.category || '';
         resourceDescriptionInput.value = row.description || '';
-        resourceLinkInput.value = row.fileLink || '';
+        resourceContentInput.value = row.resourceContent || '';
         setResourceMessage('Editing resource #' + row.resourceId, false);
         return;
       }
@@ -414,7 +420,7 @@
         title: resourceTitleInput.value.trim(),
         category: resourceCategoryInput.value.trim(),
         description: resourceDescriptionInput.value.trim(),
-        fileLink: resourceLinkInput.value.trim(),
+        resourceContent: resourceContentInput.value.trim(),
       };
 
       const editId = resourceIdInput.value.trim();
@@ -503,9 +509,13 @@
       } catch (err) {
         usersBody.innerHTML = '<tr><td colspan="6">' + safeText(err.message || 'Failed to load users.') + '</td></tr>';
         assignmentsBody.innerHTML = '<tr><td colspan="4">Could not load assignments.</td></tr>';
-        resourcesBody.innerHTML = '<tr><td colspan="5">Could not load resources.</td></tr>';
+        resourcesBody.innerHTML = '<tr><td colspan="4">Could not load resources.</td></tr>';
         contactsBody.innerHTML = '<tr><td colspan="4">Could not load emergency contacts.</td></tr>';
       }
+
+      setInterval(() => {
+        refreshAll().catch(() => {});
+      }, 15000);
     })();
   </script>
 
