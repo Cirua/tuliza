@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt')
 const { sanitizeRole, roleToTable } = require('../config')
 const { createSessionToken } = require('../auth/sessionToken')
 
+// Build a readable fallback name from an email local-part.
 function buildDisplayName(email) {
   const localPart = String(email || '').split('@')[0] || 'User'
   const cleaned = localPart.replace(/[._-]+/g, ' ').trim()
@@ -14,6 +15,7 @@ function buildDisplayName(email) {
     .join(' ')
 }
 
+// Generate a unique student username seed from email.
 function buildStudentUsername(email) {
   const localPart = String(email || '').split('@')[0] || 'student'
   const base = localPart.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20) || 'student'
@@ -21,6 +23,7 @@ function buildStudentUsername(email) {
   return `${base}_${suffix}`
 }
 
+// Map role name to its primary key column.
 function roleIdColumn(role) {
   if (role === 'student') return 'student_id'
   if (role === 'mentor') return 'mentor_id'
@@ -29,6 +32,7 @@ function roleIdColumn(role) {
   return null
 }
 
+// Map role to its dashboard route.
 function dashboardPath(role) {
   if (role === 'student') return 'student.html'
   if (role === 'mentor') return 'mentor.html'
@@ -37,6 +41,7 @@ function dashboardPath(role) {
   return 'account.html'
 }
 
+// Map role to its profile-completion route.
 function profilePath(role) {
   if (role === 'student') return 'profile-student.html'
   if (role === 'mentor') return 'profile-mentor.html'
@@ -76,6 +81,7 @@ function parseNonNegativeInt(value) {
   return parsed
 }
 
+// Schema helpers used to handle mixed legacy/current DB variants.
 async function tableExists(db, tableName) {
   const result = await db.query('SELECT to_regclass($1) AS reg', [`public.${String(tableName || '').trim()}`])
   return Boolean(result.rows[0] && result.rows[0].reg)
@@ -122,6 +128,7 @@ async function resolvePsychiatristTableMeta(db) {
   return null
 }
 
+// Normalize therapist labels used by clients.
 function normalizeTherapistType(value) {
   const normalized = String(value || '')
     .trim()
@@ -171,6 +178,7 @@ function getWorkingWindowByDay(dayOfWeek) {
   return { startHour: 9, endHour: 17 }
 }
 
+// Auto-generate 1-hour availability slots for a therapist in a date range.
 async function ensureGeneratedAvailabilitySlots(dbPool, { therapistType, therapistId, startDate, endDate }) {
   const start = new Date(startDate)
   const end = new Date(endDate)
@@ -247,6 +255,7 @@ async function ensureGeneratedAvailabilitySlots(dbPool, { therapistType, therapi
   )
 }
 
+// Ensure appointment and availability tables/indexes exist.
 async function ensureAppointmentSchema(dbPool) {
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS therapist_availability (
@@ -281,6 +290,7 @@ async function ensureAppointmentSchema(dbPool) {
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_appointments_availability ON appointments(availability_id)')
 }
 
+// Ensure journal storage exists.
 async function ensureJournalSchema(dbPool) {
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS journal (
@@ -297,6 +307,7 @@ async function ensureJournalSchema(dbPool) {
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_journal_student_created ON journal(student_id, created_at DESC)')
 }
 
+// Ensure admin operations tables (resources, contacts, KPI overrides, complaints) exist.
 async function ensureAdminOpsSchema(dbPool) {
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS admins (
@@ -427,6 +438,7 @@ async function ensureAdminOpsSchema(dbPool) {
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_complaints_status ON complaints(status)')
 }
 
+// Ensure mentor workspace tables exist.
 async function ensureMentorWorkspaceSchema(dbPool) {
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS mentor_notes (
@@ -453,6 +465,7 @@ async function ensureMentorWorkspaceSchema(dbPool) {
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_mentor_checklist_lookup ON mentor_checklist(mentor_id, created_at DESC)')
 }
 
+// Ensure psychiatrist workspace tables exist (supports legacy table variants).
 async function ensurePsychiatristWorkspaceSchema(dbPool) {
   const psychiatristMeta = await resolvePsychiatristTableMeta(dbPool)
 
@@ -506,6 +519,7 @@ async function ensurePsychiatristWorkspaceSchema(dbPool) {
   )
 }
 
+// Resolve mentor identifier from either mentor_id or signup_id.
 async function resolveMentorWorkspaceId(dbPool, rawId) {
   const numericId = parsePositiveInt(rawId)
   if (!numericId) return null
@@ -519,6 +533,7 @@ async function resolveMentorWorkspaceId(dbPool, rawId) {
   return null
 }
 
+// Resolve psychiatrist identifier from either psychiatrist_id or signup_id.
 async function resolvePsychiatristWorkspaceId(dbPool, rawId) {
   const numericId = parsePositiveInt(rawId)
   if (!numericId) return null
@@ -558,6 +573,7 @@ function normalizeAnswerSet(value) {
   )
 }
 
+// Compute assignment preference scores from questionnaire answers.
 function computeAssignmentDecision(answers) {
   const periodAffected = normalizeAnswer(answers.period_affected)
   const supportType = normalizeAnswer(answers.support_type)
@@ -618,6 +634,7 @@ function computeAssignmentDecision(answers) {
   }
 }
 
+// Select the least-loaded assignee by role.
 async function findLeastLoadedAssignee(dbPool, role) {
   if (role === 'mentor') {
     const result = await dbPool.query(
@@ -626,7 +643,7 @@ async function findLeastLoadedAssignee(dbPool, role) {
       FROM mentor m
       LEFT JOIN assignments a ON a.mentor_id = m.mentor_id
       GROUP BY m.mentor_id
-      HAVING COUNT(a.assignment_id) < 2
+      HAVING COUNT(a.assignment_id) < 4
       ORDER BY assigned_count ASC, m.mentor_id ASC
       LIMIT 1
       `
@@ -641,7 +658,7 @@ async function findLeastLoadedAssignee(dbPool, role) {
       FROM psychiatrist p
       LEFT JOIN assignments a ON a.psychiatrist_id = p.psychiatrist_id
       GROUP BY p.psychiatrist_id
-      HAVING COUNT(a.assignment_id) < 2
+      HAVING COUNT(a.assignment_id) < 4
       ORDER BY assigned_count ASC, p.psychiatrist_id ASC
       LIMIT 1
       `
@@ -701,6 +718,7 @@ async function resolveQuestionnaireAssigneeId(dbPool, role, proposedId) {
   return null
 }
 
+// Ensure questionnaire and assignments schema supports all current/legacy writes.
 async function ensureQuestionnaireWriteSchema(dbPool) {
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS assignments (
@@ -779,6 +797,7 @@ async function ensureQuestionnaireWriteSchema(dbPool) {
   }
 }
 
+// Resolve student identity from student_id or signup_id, auto-creating profile row if needed.
 async function resolveStudentIdForQuestionnaire(dbPool, rawStudentId) {
   const numericId = Number(rawStudentId)
   if (!Number.isInteger(numericId) || numericId <= 0) return null
@@ -819,6 +838,7 @@ async function resolveStudentIdForQuestionnaire(dbPool, rawStudentId) {
   return inserted.rows[0] ? Number(inserted.rows[0].student_id) : null
 }
 
+// Repair missing auto-increment defaults on role profile IDs.
 async function ensureStudentIdAutoIncrement(dbPool) {
   await dbPool.query(`
     DO $$
@@ -968,6 +988,7 @@ async function ensurePasswordHashColumn(dbPool, table) {
   await dbPool.query(`ALTER TABLE ${table} ADD COLUMN password_hash VARCHAR(255)`)
 }
 
+// Create missing profile rows for each role during profile completion.
 async function ensureRoleProfileRow(dbPool, { role, table, userIdCol, signupId, email }) {
   if (role === 'student') {
     const username = buildStudentUsername(email)
@@ -997,6 +1018,7 @@ async function ensureRoleProfileRow(dbPool, { role, table, userIdCol, signupId, 
   return null
 }
 
+// Resolve existing role profile row and repair signup linkage when safe.
 async function resolveOrRepairRoleProfileRow(dbPool, { role, table, userIdCol, signupId, email }) {
   if (role === 'admin') {
     await dbPool.query(`
@@ -1043,7 +1065,9 @@ async function resolveOrRepairRoleProfileRow(dbPool, { role, table, userIdCol, s
   return null
 }
 
+// Register all auth, profile, assignment, scheduling, admin, and workspace routes.
 function setupAuthRoutes(app, dbPool) {
+  // Resolve a user ID from role + identifier (email/name/id) for client utilities.
   app.get('/api/users/resolve-id', async (req, res) => {
     try {
       const role = sanitizeRole(req.query.role)
@@ -1120,6 +1144,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // List therapists by type for booking and selection UIs.
   app.get('/api/therapists', async (req, res) => {
     try {
       const therapistType = normalizeTherapistType(req.query.type)
@@ -1171,6 +1196,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Fetch generated therapist availability slots within a date range.
   app.get('/api/appointments/availability', async (req, res) => {
     const therapistType = normalizeTherapistType(req.query.therapistType)
     const therapistId = parsePositiveInt(req.query.therapistId)
@@ -1264,6 +1290,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Book an appointment against an available slot with transactional locking.
   app.post('/api/appointments', async (req, res) => {
     const studentId = parsePositiveInt(req.body?.studentId)
     const therapistType = normalizeTherapistType(req.body?.therapistType)
@@ -1369,6 +1396,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // List upcoming booked appointments for a therapist.
   app.get('/api/appointments/booked', async (req, res) => {
     try {
       const therapistType = normalizeTherapistType(req.query.therapistType)
@@ -1420,12 +1448,12 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Student signup (creates signup row; profile completion happens later).
   app.post('/api/signup', async (req, res) => {
     try {
-      const { email, password, role } = req.body || {}
-      const normalizedRole = sanitizeRole(role)
+      const { email, password } = req.body || {}
+      const normalizedRole = 'student'
 
-      if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' })
       if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email is required' })
       if (!password || typeof password !== 'string') return res.status(400).json({ error: 'Password is required' })
       if (!isStrongPassword(password)) {
@@ -1476,31 +1504,41 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Login and determine redirect by role/profile/questionnaire state.
   app.post('/api/login', async (req, res) => {
     try {
-      const { email, password, role } = req.body || {}
-      const normalizedRole = sanitizeRole(role)
+      const { email, password } = req.body || {}
 
-      if (!normalizedRole) return res.status(400).json({ error: 'Invalid role' })
       if (!email || typeof email !== 'string') return res.status(400).json({ error: 'Email is required' })
       if (!password || typeof password !== 'string') return res.status(400).json({ error: 'Password is required' })
+
+      const signupResult = await dbPool.query(
+        'SELECT signup_id, role, role_name, password_hash FROM signup WHERE LOWER(email) = LOWER($1)',
+        [email]
+      )
+      if (!signupResult.rows[0]) return res.status(401).json({ error: 'Invalid email or password' })
+
+      let matchedSignup = null
+      for (const row of signupResult.rows) {
+        const storedPasswordHash = String(row.password_hash || '')
+        if (!storedPasswordHash) continue
+        const ok = await bcrypt.compare(password, storedPasswordHash)
+        if (ok) {
+          matchedSignup = row
+          break
+        }
+      }
+
+      if (!matchedSignup) return res.status(401).json({ error: 'Invalid email or password' })
+
+      const normalizedRole = sanitizeRole(matchedSignup.role || matchedSignup.role_name)
+      if (!normalizedRole) return res.status(401).json({ error: 'Invalid email or password' })
 
       const table = roleToTable(normalizedRole)
       const userIdCol = roleIdColumn(normalizedRole)
       if (!table || !userIdCol) return res.status(400).json({ error: 'Invalid role' })
 
-      const roleRow = await resolveRoleRow(dbPool, normalizedRole)
-      if (!roleRow) return res.status(400).json({ error: 'Role mapping missing in roles table.' })
-
-      const signupResult = await dbPool.query(
-        'SELECT signup_id, password_hash FROM signup WHERE email = $1 AND role_id = $2 LIMIT 1',
-        [email, Number(roleRow.role_id)]
-      )
-      if (!signupResult.rows[0]) return res.status(401).json({ error: 'Invalid email or password' })
-
-      const { signup_id: signupId, password_hash: storedPasswordHash } = signupResult.rows[0]
-      const ok = await bcrypt.compare(password, storedPasswordHash)
-      if (!ok) return res.status(401).json({ error: 'Invalid email or password' })
+      const signupId = Number(matchedSignup.signup_id)
 
       const userId = await resolveOrRepairRoleProfileRow(dbPool, {
         role: normalizedRole,
@@ -1549,6 +1587,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Save questionnaire answers and upsert assignment decision.
   app.post('/api/questionnaire', async (req, res) => {
     try {
       const { studentId, answers } = req.body || {}
@@ -1621,10 +1660,7 @@ function setupAuthRoutes(app, dbPool) {
         : null
 
       if (assigneeRole && assigneeId == null) {
-        const roleLabel = assigneeRole === 'mentor' ? 'Mentor' : 'Psychiatrist'
-        return res.status(409).json({
-          error: `${roleLabel} assignment limit reached. Maximum 2 students per ${assigneeRole}.`,
-        })
+        return res.status(409).json({ error: `No available ${assigneeRole} currently. Please try again shortly.` })
       }
 
       const mentorId =
@@ -1914,6 +1950,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Create or update role profile details.
   app.post('/api/profile', async (req, res) => {
     try {
       const {
@@ -2173,6 +2210,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Fetch role profile details by signup account.
   app.get('/api/profile', async (req, res) => {
     try {
       const normalizedRole = sanitizeRole(req.query.role)
@@ -2376,6 +2414,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Delete account/profile with role-specific cleanup.
   app.delete('/api/profile', async (req, res) => {
     const normalizedRole = sanitizeRole(req.body?.role)
     const parsedSignupId = Number(req.body?.signupId)
@@ -2501,6 +2540,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Return questionnaire snapshots assigned to mentor/psychiatrist.
   app.get('/api/questionnaire/assigned-view', async (req, res) => {
     try {
       const role = sanitizeRole(req.query.role)
@@ -2575,6 +2615,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Resolve and return a student's currently assigned support profile.
   app.get('/api/student/assigned-support', async (req, res) => {
     try {
       const studentId = Number(req.query.studentId)
@@ -2603,14 +2644,32 @@ function setupAuthRoutes(app, dbPool) {
 
       const studentTable = (await tableExists('student')) ? 'student' : (await tableExists('students')) ? 'students' : null
       if (studentTable === 'student') {
-        const bySignup = await dbPool.query('SELECT student_id FROM student WHERE signup_id = $1 LIMIT 1', [studentId])
-        if (bySignup.rows[0]) resolvedStudentId = Number(bySignup.rows[0].student_id)
+        const byStudentId = await dbPool.query('SELECT student_id FROM student WHERE student_id = $1 LIMIT 1', [studentId])
+        if (!byStudentId.rows[0]) {
+          const bySignup = await dbPool.query('SELECT student_id FROM student WHERE signup_id = $1 LIMIT 1', [studentId])
+          if (bySignup.rows[0]) resolvedStudentId = Number(bySignup.rows[0].student_id)
+        }
       } else if (studentTable === 'students') {
-        const bySignup = await dbPool.query('SELECT student_id FROM students WHERE signup_id = $1 LIMIT 1', [studentId])
-        if (bySignup.rows[0]) resolvedStudentId = Number(bySignup.rows[0].student_id)
+        const byStudentId = await dbPool.query('SELECT student_id FROM students WHERE student_id = $1 LIMIT 1', [studentId])
+        if (!byStudentId.rows[0]) {
+          const bySignup = await dbPool.query('SELECT student_id FROM students WHERE signup_id = $1 LIMIT 1', [studentId])
+          if (bySignup.rows[0]) resolvedStudentId = Number(bySignup.rows[0].student_id)
+        }
       }
 
       const assignment = await dbPool.query(
+        `
+        SELECT mentor_id, psychiatrist_id
+        FROM assignments
+        WHERE student_id = $1
+        ORDER BY assignment_id DESC
+        LIMIT 1
+        `,
+        [resolvedStudentId]
+      )
+
+      // Also read questionnaire assignment columns so we can resolve stale/conflicting historical data.
+      const questionnaireAssignment = await dbPool.query(
         `
         SELECT mentor_id, psychiatrist_id
         FROM questionnaire
@@ -2621,12 +2680,66 @@ function setupAuthRoutes(app, dbPool) {
         [resolvedStudentId]
       )
 
-      const row = assignment.rows[0]
-      if (!row || (!row.mentor_id && !row.psychiatrist_id)) {
+      const assignmentRow = assignment.rows[0] || {}
+      const questionnaireRow = questionnaireAssignment.rows[0] || {}
+
+      const assignmentMentorId =
+        assignmentRow.mentor_id != null && Number.isFinite(Number(assignmentRow.mentor_id))
+          ? Number(assignmentRow.mentor_id)
+          : null
+      const assignmentPsychiatristId =
+        assignmentRow.psychiatrist_id != null && Number.isFinite(Number(assignmentRow.psychiatrist_id))
+          ? Number(assignmentRow.psychiatrist_id)
+          : null
+      const questionnaireMentorId =
+        questionnaireRow.mentor_id != null && Number.isFinite(Number(questionnaireRow.mentor_id))
+          ? Number(questionnaireRow.mentor_id)
+          : null
+      const questionnairePsychiatristId =
+        questionnaireRow.psychiatrist_id != null && Number.isFinite(Number(questionnaireRow.psychiatrist_id))
+          ? Number(questionnaireRow.psychiatrist_id)
+          : null
+
+      const hasAssignmentMentor = assignmentMentorId != null
+      const hasAssignmentPsychiatrist = assignmentPsychiatristId != null
+      const hasQuestionnaireMentor = questionnaireMentorId != null
+      const hasQuestionnairePsychiatrist = questionnairePsychiatristId != null
+
+      let assignedRole = null
+      let assignedId = null
+
+      if (hasAssignmentMentor && !hasAssignmentPsychiatrist) {
+        assignedRole = 'mentor'
+        assignedId = assignmentMentorId
+      } else if (!hasAssignmentMentor && hasAssignmentPsychiatrist) {
+        assignedRole = 'psychiatrist'
+        assignedId = assignmentPsychiatristId
+      } else if (hasQuestionnaireMentor && !hasQuestionnairePsychiatrist) {
+        // If assignments data is stale or ambiguous, prefer questionnaire's single-role signal.
+        assignedRole = 'mentor'
+        assignedId = questionnaireMentorId
+      } else if (!hasQuestionnaireMentor && hasQuestionnairePsychiatrist) {
+        assignedRole = 'psychiatrist'
+        assignedId = questionnairePsychiatristId
+      } else if (hasAssignmentMentor) {
+        assignedRole = 'mentor'
+        assignedId = assignmentMentorId
+      } else if (hasAssignmentPsychiatrist) {
+        assignedRole = 'psychiatrist'
+        assignedId = assignmentPsychiatristId
+      } else if (hasQuestionnaireMentor) {
+        assignedRole = 'mentor'
+        assignedId = questionnaireMentorId
+      } else if (hasQuestionnairePsychiatrist) {
+        assignedRole = 'psychiatrist'
+        assignedId = questionnairePsychiatristId
+      }
+
+      if (!assignedRole || assignedId == null) {
         return res.json({ ok: true, assigned: false })
       }
 
-      if (row.mentor_id) {
+      if (assignedRole === 'mentor') {
         const mentorTable = (await tableExists('mentor')) ? 'mentor' : (await tableExists('mentors')) ? 'mentors' : null
         if (!mentorTable) {
           return res.json({ ok: true, assigned: false })
@@ -2644,7 +2757,7 @@ function setupAuthRoutes(app, dbPool) {
           WHERE m.mentor_id = $1
           LIMIT 1
           `,
-          [Number(row.mentor_id)]
+          [assignedId]
         )
 
         if (!mentorProfile.rows[0]) {
@@ -2655,7 +2768,7 @@ function setupAuthRoutes(app, dbPool) {
           ok: true,
           assigned: true,
           assignedRole: 'mentor',
-          assignedId: Number(row.mentor_id),
+          assignedId,
           profile: mentorProfile.rows[0] || {},
         })
       }
@@ -2684,7 +2797,7 @@ function setupAuthRoutes(app, dbPool) {
         WHERE p.psychiatrist_id = $1
         LIMIT 1
         `,
-        [Number(row.psychiatrist_id)]
+        [assignedId]
       )
 
       if (!psychiatristProfile.rows[0]) {
@@ -2695,7 +2808,7 @@ function setupAuthRoutes(app, dbPool) {
         ok: true,
         assigned: true,
         assignedRole: 'psychiatrist',
-        assignedId: Number(row.psychiatrist_id),
+        assignedId,
         profile: psychiatristProfile.rows[0] || {},
       })
     } catch (err) {
@@ -2704,6 +2817,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Journal CRUD routes for students.
   app.get('/api/journal', async (req, res) => {
     try {
       const providedStudentId = parsePositiveInt(req.query.studentId)
@@ -2886,6 +3000,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Chat peer discovery based on active assignments.
   app.get('/api/chat/peers', async (req, res) => {
     try {
       const role = sanitizeRole(req.query.role)
@@ -3018,6 +3133,264 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Admin staff account management routes.
+  app.get('/api/admin/staff-accounts', async (req, res) => {
+    try {
+      const limit = Math.min(parsePositiveInt(req.query.limit) || 10, 50)
+      const result = await dbPool.query(
+        `
+        SELECT
+          s.signup_id,
+          LOWER(COALESCE(s.role, s.role_name, '')) AS role,
+          s.email,
+          s.created_at,
+          m.mentor_id,
+          m.full_name AS mentor_full_name,
+          p.psychiatrist_id,
+          p.full_name AS psychiatrist_full_name
+        FROM signup s
+        LEFT JOIN mentor m ON m.signup_id = s.signup_id
+        LEFT JOIN psychiatrist p ON p.signup_id = s.signup_id
+        WHERE LOWER(COALESCE(s.role, s.role_name, '')) IN ('mentor', 'psychiatrist')
+        ORDER BY s.created_at DESC
+        LIMIT $1
+        `,
+        [limit]
+      )
+
+      return res.json({
+        ok: true,
+        rows: result.rows.map((row) => ({
+          signupId: Number(row.signup_id),
+          role: String(row.role || ''),
+          email: String(row.email || ''),
+          userId: row.role === 'mentor' ? Number(row.mentor_id || 0) || null : Number(row.psychiatrist_id || 0) || null,
+          fullName: String(row.mentor_full_name || row.psychiatrist_full_name || ''),
+          createdAt: toIsoString(row.created_at),
+        })),
+      })
+    } catch (err) {
+      console.error('Failed to load staff accounts:', err.message)
+      return res.status(500).json({ error: 'Failed to load staff accounts.' })
+    }
+  })
+
+  app.post('/api/admin/staff-accounts', async (req, res) => {
+    const { role, email, password, fullName } = req.body || {}
+    const normalizedRole = sanitizeRole(role)
+    const safeEmail = String(email || '').trim().toLowerCase()
+    const safeFullName = String(fullName || '').trim()
+
+    if (normalizedRole !== 'mentor' && normalizedRole !== 'psychiatrist') {
+      return res.status(400).json({ error: 'Role must be mentor or psychiatrist.' })
+    }
+    if (!safeEmail) return res.status(400).json({ error: 'Email is required.' })
+    if (!safeFullName) return res.status(400).json({ error: 'Full name is required.' })
+    if (!password || typeof password !== 'string') return res.status(400).json({ error: 'Password is required.' })
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        error: 'Password must be more than 6 characters and include uppercase, lowercase, and a special character.',
+      })
+    }
+
+    let client = null
+    try {
+      const roleRow = await resolveRoleRow(dbPool, normalizedRole)
+      if (!roleRow) return res.status(400).json({ error: 'Role mapping missing in roles table.' })
+
+      const existingSignup = await dbPool.query('SELECT signup_id FROM signup WHERE LOWER(email) = LOWER($1) LIMIT 1', [safeEmail])
+      if (existingSignup.rows[0]) {
+        return res.status(409).json({ error: 'Email already exists. Use a different email.' })
+      }
+
+      client = await dbPool.connect()
+      await client.query('BEGIN')
+
+      const passwordHash = await bcrypt.hash(password, 10)
+      const signupInsert = await client.query(
+        'INSERT INTO signup (email, role_id, role_name, role, password_hash) VALUES ($1, $2, $3, $4, $5) RETURNING signup_id',
+        [safeEmail, Number(roleRow.role_id), String(roleRow.role_name), normalizedRole, passwordHash]
+      )
+      const signupId = Number(signupInsert.rows[0].signup_id)
+
+      let userId = null
+      if (normalizedRole === 'mentor') {
+        await ensureMentorIdAutoIncrement(client)
+        await client.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
+        const created = await client.query(
+          `
+          INSERT INTO mentor (signup_id, email, full_name, password_hash)
+          VALUES ($1, $2, $3, $4)
+          RETURNING mentor_id
+          `,
+          [signupId, safeEmail, safeFullName, passwordHash]
+        )
+        userId = Number(created.rows[0].mentor_id)
+      } else {
+        const psychiatristMeta = await resolvePsychiatristTableMeta(client)
+        const table = psychiatristMeta ? psychiatristMeta.table : 'psychiatrist'
+        const idColumn = psychiatristMeta ? psychiatristMeta.idColumn : 'psychiatrist_id'
+        await ensurePsychiatristIdAutoIncrement(client)
+        await client.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`)
+        const created = await client.query(
+          `
+          INSERT INTO ${table} (signup_id, email, full_name, password_hash)
+          VALUES ($1, $2, $3, $4)
+          RETURNING ${idColumn} AS user_id
+          `,
+          [signupId, safeEmail, safeFullName, passwordHash]
+        )
+        userId = Number(created.rows[0].user_id)
+      }
+
+      await client.query('COMMIT')
+      return res.json({
+        ok: true,
+        signupId: String(signupId),
+        userId: userId == null ? null : String(userId),
+        role: normalizedRole,
+        message: 'Staff login account created successfully.',
+      })
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query('ROLLBACK')
+        } catch (_) {}
+      }
+      console.error('Failed to create staff account:', err.message)
+      return res.status(500).json({ error: 'Failed to create staff account.' })
+    } finally {
+      if (client) client.release()
+    }
+  })
+
+  app.put('/api/admin/staff-accounts/:signupId', async (req, res) => {
+    const parsedSignupId = parsePositiveInt(req.params.signupId)
+    if (!parsedSignupId) {
+      return res.status(400).json({ error: 'Valid signupId is required.' })
+    }
+
+    const { email, password, fullName } = req.body || {}
+    const safeEmail = String(email || '').trim().toLowerCase()
+    const safeFullName = String(fullName || '').trim()
+    if (!safeEmail) return res.status(400).json({ error: 'Email is required.' })
+
+    try {
+      const signupRow = await dbPool.query('SELECT signup_id, role, role_name FROM signup WHERE signup_id = $1 LIMIT 1', [parsedSignupId])
+      if (!signupRow.rows[0]) return res.status(404).json({ error: 'User account not found.' })
+
+      const normalizedRole = sanitizeRole(signupRow.rows[0].role || signupRow.rows[0].role_name)
+      if (normalizedRole !== 'mentor' && normalizedRole !== 'psychiatrist') {
+        return res.status(400).json({ error: 'Only mentor and psychiatrist accounts can be edited here.' })
+      }
+
+      const duplicateSignup = await dbPool.query(
+        'SELECT signup_id FROM signup WHERE LOWER(email) = LOWER($1) AND signup_id <> $2 LIMIT 1',
+        [safeEmail, parsedSignupId]
+      )
+      if (duplicateSignup.rows[0]) {
+        return res.status(409).json({ error: 'Email already exists. Use a different email.' })
+      }
+
+      let passwordHash = null
+      if (password != null && String(password).trim()) {
+        if (!isStrongPassword(password)) {
+          return res.status(400).json({
+            error: 'Password must be more than 6 characters and include uppercase, lowercase, and a special character.',
+          })
+        }
+        passwordHash = await bcrypt.hash(String(password), 10)
+      }
+
+      if (passwordHash) {
+        await dbPool.query('UPDATE signup SET email = $1, password_hash = $2 WHERE signup_id = $3', [safeEmail, passwordHash, parsedSignupId])
+      } else {
+        await dbPool.query('UPDATE signup SET email = $1 WHERE signup_id = $2', [safeEmail, parsedSignupId])
+      }
+
+      if (normalizedRole === 'mentor') {
+        if (passwordHash) {
+          await dbPool.query(
+            'UPDATE mentor SET email = $1, full_name = COALESCE($2, full_name), password_hash = $3 WHERE signup_id = $4',
+            [safeEmail, safeFullName || null, passwordHash, parsedSignupId]
+          )
+        } else {
+          await dbPool.query('UPDATE mentor SET email = $1, full_name = COALESCE($2, full_name) WHERE signup_id = $3', [
+            safeEmail,
+            safeFullName || null,
+            parsedSignupId,
+          ])
+        }
+      } else {
+        const psychiatristMeta = await resolvePsychiatristTableMeta(dbPool)
+        if (!psychiatristMeta) {
+          return res.status(500).json({ error: 'Psychiatrist table metadata is unavailable.' })
+        }
+
+        if (passwordHash) {
+          await dbPool.query(
+            `UPDATE ${psychiatristMeta.table} SET email = $1, full_name = COALESCE($2, full_name), password_hash = $3 WHERE signup_id = $4`,
+            [safeEmail, safeFullName || null, passwordHash, parsedSignupId]
+          )
+        } else {
+          await dbPool.query(
+            `UPDATE ${psychiatristMeta.table} SET email = $1, full_name = COALESCE($2, full_name) WHERE signup_id = $3`,
+            [safeEmail, safeFullName || null, parsedSignupId]
+          )
+        }
+      }
+
+      return res.json({ ok: true, message: 'Staff account updated successfully.' })
+    } catch (err) {
+      console.error('Failed to update staff account:', err.message)
+      return res.status(500).json({ error: 'Failed to update staff account.' })
+    }
+  })
+
+  app.delete('/api/admin/staff-accounts/:signupId', async (req, res) => {
+    const parsedSignupId = parsePositiveInt(req.params.signupId)
+    if (!parsedSignupId) return res.status(400).json({ error: 'Valid signupId is required.' })
+
+    let client = null
+    try {
+      const signupRow = await dbPool.query('SELECT signup_id, role, role_name FROM signup WHERE signup_id = $1 LIMIT 1', [parsedSignupId])
+      if (!signupRow.rows[0]) return res.status(404).json({ error: 'User account not found.' })
+
+      const normalizedRole = sanitizeRole(signupRow.rows[0].role || signupRow.rows[0].role_name)
+      if (normalizedRole !== 'mentor' && normalizedRole !== 'psychiatrist') {
+        return res.status(400).json({ error: 'Only mentor and psychiatrist accounts can be deleted here.' })
+      }
+
+      client = await dbPool.connect()
+      await client.query('BEGIN')
+      if (normalizedRole === 'mentor') {
+        await client.query('DELETE FROM mentor WHERE signup_id = $1', [parsedSignupId])
+      } else {
+        const psychiatristMeta = await resolvePsychiatristTableMeta(client)
+        if (!psychiatristMeta) {
+          await client.query('ROLLBACK')
+          return res.status(500).json({ error: 'Psychiatrist table metadata is unavailable.' })
+        }
+        await client.query(`DELETE FROM ${psychiatristMeta.table} WHERE signup_id = $1`, [parsedSignupId])
+      }
+
+      await client.query('DELETE FROM signup WHERE signup_id = $1', [parsedSignupId])
+      await client.query('COMMIT')
+      return res.json({ ok: true, message: 'Staff account deleted successfully.' })
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query('ROLLBACK')
+        } catch (_) {}
+      }
+      console.error('Failed to delete staff account:', err.message)
+      return res.status(500).json({ error: 'Failed to delete staff account.' })
+    } finally {
+      if (client) client.release()
+    }
+  })
+
+  // Admin dashboard aggregates users, assignments, and KPI overrides.
   app.get('/api/admin/dashboard-data', async (req, res) => {
     try {
       await ensureAdminOpsSchema(dbPool)
@@ -3042,6 +3415,7 @@ function setupAuthRoutes(app, dbPool) {
         LEFT JOIN mentor m ON m.signup_id = s.signup_id
         LEFT JOIN psychiatrist p ON p.signup_id = s.signup_id
         LEFT JOIN admins a ON a.signup_id = s.signup_id
+        WHERE LOWER(COALESCE(s.role, s.role_name, '')) <> 'admin'
         ORDER BY s.created_at DESC
         `
       )
@@ -3143,6 +3517,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Mentor workspace: notes, checklist, availability, and calendar.
   app.get('/api/mentor/notes', async (req, res) => {
     try {
       await ensureMentorWorkspaceSchema(dbPool)
@@ -3548,6 +3923,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Psychiatrist workspace: notes, risk overview, calendar, and case report.
   app.get('/api/psychiatrist/notes', async (req, res) => {
     try {
       await ensurePsychiatristWorkspaceSchema(dbPool)
@@ -3949,6 +4325,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Therapist day blocking/unblocking for schedule management.
   app.post('/api/therapists/block-day', async (req, res) => {
     try {
       await ensureAppointmentSchema(dbPool)
@@ -4063,6 +4440,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Admin KPI override controls.
   app.put('/api/admin/kpis', async (req, res) => {
     try {
       await ensureAdminOpsSchema(dbPool)
@@ -4112,6 +4490,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Complaint submission, review, and reassignment workflow.
   app.post('/api/complaints', async (req, res) => {
     try {
       await ensureAdminOpsSchema(dbPool)
@@ -4302,19 +4681,9 @@ function setupAuthRoutes(app, dbPool) {
       )
       const assignmentRow = existingAssignment.rows[0] || {}
 
-      const nextMentorId =
-        newRole === 'mentor'
-          ? selectedAssigneeId
-          : assignmentRow.mentor_id == null
-            ? null
-            : Number(assignmentRow.mentor_id)
+      const nextMentorId = newRole === 'mentor' ? selectedAssigneeId : null
 
-      const nextPsychiatristId =
-        newRole === 'psychiatrist'
-          ? selectedAssigneeId
-          : assignmentRow.psychiatrist_id == null
-            ? null
-            : Number(assignmentRow.psychiatrist_id)
+      const nextPsychiatristId = newRole === 'psychiatrist' ? selectedAssigneeId : null
 
       await dbPool.query(
         `
@@ -4334,9 +4703,12 @@ function setupAuthRoutes(app, dbPool) {
       )
 
       if (newRole === 'mentor') {
-        await dbPool.query('UPDATE questionnaire SET mentor_id = $2 WHERE student_id = $1', [studentId, selectedAssigneeId])
+        await dbPool.query('UPDATE questionnaire SET mentor_id = $2, psychiatrist_id = NULL WHERE student_id = $1', [
+          studentId,
+          selectedAssigneeId,
+        ])
       } else {
-        await dbPool.query('UPDATE questionnaire SET psychiatrist_id = $2 WHERE student_id = $1', [
+        await dbPool.query('UPDATE questionnaire SET psychiatrist_id = $2, mentor_id = NULL WHERE student_id = $1', [
           studentId,
           selectedAssigneeId,
         ])
@@ -4371,6 +4743,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Resource library CRUD (admin) and read endpoints (all users).
   app.get('/api/admin/resources', async (req, res) => {
     try {
       await ensureAdminOpsSchema(dbPool)
@@ -4576,6 +4949,7 @@ function setupAuthRoutes(app, dbPool) {
     }
   })
 
+  // Emergency contact management (admin-facing).
   app.get('/api/admin/emergency-contacts', async (req, res) => {
     try {
       await ensureAdminOpsSchema(dbPool)
