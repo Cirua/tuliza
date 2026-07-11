@@ -21,6 +21,8 @@
     </a>
     <div class="nav-tabs" role="navigation" aria-label="Admin pages">
       <a class="nav-tab active" href="/admin.html" aria-current="page">Admin</a>
+      <a class="nav-tab" href="/view-users.html">View Users</a>
+      <a class="nav-tab" href="/assignments.html">View Assignments</a>
       <button id="logout-btn" class="nav-tab" type="button">Logout</button>
     </div>
   </nav>
@@ -29,41 +31,51 @@
     <section class="role-hero">
       <div>
         <p class="role-eyebrow">Platform operations</p>
-        <h1>Database operations dashboard</h1>
-        <p class="subtitle">View users and assignments, then manage resources and emergency contacts directly.</p>
+        <h1>Admin home</h1>
+        <p class="subtitle">Quick KPIs, staff login management, and resource/contact administration.</p>
       </div>
     </section>
 
     <section class="role-kpi-grid fade-up fade-up-delay-1" aria-label="Admin metrics">
-      <article class="role-kpi-card">
-        <p class="role-kpi-label">Total students</p>
-        <p id="kpi-students" class="role-kpi-value">-</p>
-        <p class="role-kpi-meta">From signup + student tables</p>
-      </article>
-      <article class="role-kpi-card">
-        <p class="role-kpi-label">Mentors active</p>
-        <p id="kpi-mentors" class="role-kpi-value">-</p>
-        <p class="role-kpi-meta">Current mentor profiles</p>
-      </article>
-      <article class="role-kpi-card">
-        <p class="role-kpi-label">Psychiatrists active</p>
-        <p id="kpi-psychiatrists" class="role-kpi-value">-</p>
-        <p class="role-kpi-meta">Current psychiatrist profiles</p>
-      </article>
-      <article class="role-kpi-card">
-        <p class="role-kpi-label">Assignments</p>
-        <p id="kpi-assignments" class="role-kpi-value">-</p>
-        <p class="role-kpi-meta">Rows in assignments table</p>
-      </article>
+      <article class="role-kpi-card"><p class="role-kpi-label">Total students</p><p id="kpi-students" class="role-kpi-value">-</p></article>
+      <article class="role-kpi-card"><p class="role-kpi-label">Mentors active</p><p id="kpi-mentors" class="role-kpi-value">-</p></article>
+      <article class="role-kpi-card"><p class="role-kpi-label">Psychiatrists active</p><p id="kpi-psychiatrists" class="role-kpi-value">-</p></article>
+      <article class="role-kpi-card"><p class="role-kpi-label">Assignments</p><p id="kpi-assignments" class="role-kpi-value">-</p></article>
     </section>
 
     <section class="role-layout fade-up fade-up-delay-2" style="grid-template-columns: 1fr;">
       <article class="role-panel">
         <div class="role-panel-head">
-          <h2>Users</h2>
+          <h2 id="staff-form-title">Add Staff Login</h2>
+          <p class="role-help-text" style="margin:0;">Create mentor/psychiatrist credentials used for login.</p>
         </div>
+        <form id="staff-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
+          <div class="form-group">
+            <label class="form-label" for="staff-role">Role</label>
+            <select id="staff-role" class="form-select" required>
+              <option value="">Select role</option>
+              <option value="mentor">Mentor</option>
+              <option value="psychiatrist">Psychiatrist</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label" for="staff-fullname">Full name</label><input id="staff-fullname" class="form-input" required /></div>
+          <div class="form-group"><label class="form-label" for="staff-email">Email</label><input id="staff-email" class="form-input" type="email" required /></div>
+          <div class="form-group">
+            <label class="form-label" for="staff-password">Password</label>
+            <div class="password-field">
+              <input id="staff-password" class="form-input" type="password" minlength="7" required />
+              <button id="toggle-staff-password" type="button" class="password-toggle" aria-label="Show password" aria-pressed="false">Show</button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button id="staff-submit-btn" class="btn-primary" type="submit">Create staff login</button>
+            <button id="staff-reset" class="btn-ghost-modal" type="button">Clear</button>
+          </div>
+          <p id="staff-msg" class="role-help-text"></p>
+        </form>
+
         <div class="role-table-wrap">
-          <table class="role-table" aria-label="Users table">
+          <table class="role-table" aria-label="Recent staff accounts table">
             <thead>
               <tr>
                 <th>Signup ID</th>
@@ -74,123 +86,32 @@
                 <th>Created</th>
               </tr>
             </thead>
-            <tbody id="users-body"></tbody>
+            <tbody id="staff-body"></tbody>
           </table>
         </div>
       </article>
-
-      <article class="role-panel">
-        <div class="role-panel-head">
-          <h2>Assignments</h2>
-        </div>
-        <div class="role-table-wrap">
-          <table class="role-table" aria-label="Assignments table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Student</th>
-                <th>Mentor</th>
-                <th>Psychiatrist</th>
-              </tr>
-            </thead>
-            <tbody id="assignments-body"></tbody>
-          </table>
-        </div>
-      </article>
-
-      <article class="role-panel">
-        <div class="role-panel-head">
-          <h2>Resources</h2>
-        </div>
-        <form id="resource-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
-          <input id="resource-id" type="hidden" />
-          <div class="form-group"><label class="form-label" for="resource-title">Title</label><input id="resource-title" class="form-input" required /></div>
-          <div class="form-group"><label class="form-label" for="resource-category">Category</label><input id="resource-category" class="form-input" /></div>
-          <div class="form-group"><label class="form-label" for="resource-description">Description</label><textarea id="resource-description" class="form-textarea"></textarea></div>
-          <div class="form-group"><label class="form-label" for="resource-content">In-depth information</label><textarea id="resource-content" class="form-textarea" rows="8" placeholder="Add detailed guidance, steps, examples, and when to seek additional support..."></textarea></div>
-          <div class="modal-actions">
-            <button class="btn-primary" type="submit">Save resource</button>
-            <button id="resource-reset" class="btn-ghost-modal" type="button">Clear</button>
-          </div>
-          <p id="resource-msg" class="role-help-text"></p>
-        </form>
-        <div class="role-table-wrap">
-          <table class="role-table" aria-label="Resources table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Category</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="resources-body"></tbody>
-          </table>
-        </div>
-      </article>
-
-      <article class="role-panel">
-        <div class="role-panel-head">
-          <h2>Emergency Contacts</h2>
-        </div>
-        <form id="contact-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
-          <input id="contact-id" type="hidden" />
-          <div class="form-group"><label class="form-label" for="contact-name">Contact name</label><input id="contact-name" class="form-input" required /></div>
-          <div class="form-group"><label class="form-label" for="contact-phone">Phone number</label><input id="contact-phone" class="form-input" type="tel" /></div>
-          <div class="modal-actions">
-            <button class="btn-primary" type="submit">Save contact</button>
-            <button id="contact-reset" class="btn-ghost-modal" type="button">Clear</button>
-          </div>
-          <p id="contact-msg" class="role-help-text"></p>
-        </form>
-        <div class="role-table-wrap">
-          <table class="role-table" aria-label="Emergency contacts table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="contacts-body"></tbody>
-          </table>
-        </div>
-      </article>
-
     </section>
   </main>
 
   <script>
-    const usersBody = document.getElementById('users-body');
-    const assignmentsBody = document.getElementById('assignments-body');
-    const resourcesBody = document.getElementById('resources-body');
-    const contactsBody = document.getElementById('contacts-body');
     const logoutBtn = document.getElementById('logout-btn');
-
-    const resourceForm = document.getElementById('resource-form');
-    const resourceIdInput = document.getElementById('resource-id');
-    const resourceTitleInput = document.getElementById('resource-title');
-    const resourceCategoryInput = document.getElementById('resource-category');
-    const resourceDescriptionInput = document.getElementById('resource-description');
-    const resourceContentInput = document.getElementById('resource-content');
-    const resourceResetBtn = document.getElementById('resource-reset');
-    const resourceMsg = document.getElementById('resource-msg');
-
-    const contactForm = document.getElementById('contact-form');
-    const contactIdInput = document.getElementById('contact-id');
-    const contactNameInput = document.getElementById('contact-name');
-    const contactPhoneInput = document.getElementById('contact-phone');
-    const contactResetBtn = document.getElementById('contact-reset');
-    const contactMsg = document.getElementById('contact-msg');
-
     const kpiStudents = document.getElementById('kpi-students');
     const kpiMentors = document.getElementById('kpi-mentors');
     const kpiPsychiatrists = document.getElementById('kpi-psychiatrists');
     const kpiAssignments = document.getElementById('kpi-assignments');
 
-    let resourceRows = [];
-    let contactRows = [];
+    const staffForm = document.getElementById('staff-form');
+    const staffFormTitle = document.getElementById('staff-form-title');
+    const staffSubmitBtn = document.getElementById('staff-submit-btn');
+    const staffRoleInput = document.getElementById('staff-role');
+    const staffFullnameInput = document.getElementById('staff-fullname');
+    const staffEmailInput = document.getElementById('staff-email');
+    const staffPasswordInput = document.getElementById('staff-password');
+    const staffResetBtn = document.getElementById('staff-reset');
+    const staffMsg = document.getElementById('staff-msg');
+    const staffBody = document.getElementById('staff-body');
+    const toggleStaffPassword = document.getElementById('toggle-staff-password');
+    let editingSignupId = null;
 
     function safeText(value) {
       return String(value || '').trim() || '-';
@@ -205,78 +126,45 @@
     async function api(url, options) {
       const response = await fetch(url, options);
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error || 'Request failed');
-      }
+      if (!response.ok) throw new Error(payload.error || 'Request failed');
       return payload;
     }
 
-    function setResourceMessage(message, isError) {
-      resourceMsg.textContent = message || '';
-      resourceMsg.style.color = isError ? '#B42318' : '#146C43';
+    function setStaffMessage(message, isError) {
+      staffMsg.textContent = message || '';
+      staffMsg.style.color = isError ? '#B42318' : '#146C43';
     }
 
-    function setContactMessage(message, isError) {
-      contactMsg.textContent = message || '';
-      contactMsg.style.color = isError ? '#B42318' : '#146C43';
-    }
-
-
-    function resetResourceForm() {
-      resourceIdInput.value = '';
-      resourceTitleInput.value = '';
-      resourceCategoryInput.value = '';
-      resourceDescriptionInput.value = '';
-      resourceContentInput.value = '';
-      setResourceMessage('', false);
-    }
-
-    function resetContactForm() {
-      contactIdInput.value = '';
-      contactNameInput.value = '';
-      contactPhoneInput.value = '';
-      setContactMessage('', false);
-    }
-
-
-    function renderUsers(rows) {
-      usersBody.innerHTML = '';
-      if (!rows.length) {
-        usersBody.innerHTML = '<tr><td colspan="6">No users found.</td></tr>';
-        return;
+    function resetStaffForm(options = {}) {
+      const keepMessage = Boolean(options.keepMessage);
+      staffRoleInput.value = '';
+      staffFullnameInput.value = '';
+      staffEmailInput.value = '';
+      staffPasswordInput.value = '';
+      staffPasswordInput.required = true;
+      staffPasswordInput.minLength = 7;
+      editingSignupId = null;
+      staffRoleInput.disabled = false;
+      staffFormTitle.textContent = 'Add Staff Login';
+      staffSubmitBtn.textContent = 'Create staff login';
+      if (!keepMessage) {
+        setStaffMessage('', false);
       }
-
-      rows.forEach((row) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${safeText(row.signupId)}</td>
-          <td>${safeText(row.userId)}</td>
-          <td>${safeText(row.displayName)}</td>
-          <td>${safeText(row.role)}</td>
-          <td>${safeText(row.email)}</td>
-          <td>${safeText(formatDate(row.createdAt))}</td>
-        `;
-        usersBody.appendChild(tr);
-      });
     }
 
-    function renderAssignments(rows) {
-      assignmentsBody.innerHTML = '';
-      if (!rows.length) {
-        assignmentsBody.innerHTML = '<tr><td colspan="4">No assignments found.</td></tr>';
-        return;
-      }
-
-      rows.forEach((row) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${safeText(row.assignmentId)}</td>
-          <td>${safeText(row.studentUsername)} (${safeText(row.studentId)})</td>
-          <td>${safeText(row.mentorName)} (${safeText(row.mentorId)})</td>
-          <td>${safeText(row.psychiatristName)} (${safeText(row.psychiatristId)})</td>
-        `;
-        assignmentsBody.appendChild(tr);
-      });
+    function applyEditMode(user) {
+      editingSignupId = Number(user.signupId);
+      staffRoleInput.value = String(user.role || '').toLowerCase();
+      staffRoleInput.disabled = true;
+      staffFullnameInput.value = String(user.displayName || '').trim();
+      staffEmailInput.value = String(user.email || '').trim();
+      staffPasswordInput.value = '';
+      staffPasswordInput.required = false;
+      staffPasswordInput.minLength = 0;
+      staffFormTitle.textContent = 'Edit Staff Login';
+      staffSubmitBtn.textContent = 'Update staff login';
+      setStaffMessage('Editing signup #' + editingSignupId + '. Leave password empty to keep current password.', false);
+      staffForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function applyStatsToKpis(stats) {
@@ -287,203 +175,125 @@
       kpiAssignments.textContent = String(computed.assignmentsActive ?? 0);
     }
 
-    function renderResources() {
-      resourcesBody.innerHTML = '';
-      if (!resourceRows.length) {
-        resourcesBody.innerHTML = '<tr><td colspan="4">No resources found.</td></tr>';
+    function renderStaffRows(rows) {
+      staffBody.innerHTML = '';
+      if (!rows.length) {
+        staffBody.innerHTML = '<tr><td colspan="6">No staff logins found.</td></tr>';
         return;
       }
 
-      resourceRows.forEach((row) => {
+      rows.forEach((row) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${safeText(row.resourceId)}</td>
-          <td>${safeText(row.title)}</td>
-          <td>${safeText(row.category)}</td>
-          <td>
-            <button class="role-mini-btn" type="button" data-resource-edit="${row.resourceId}">Edit</button>
-            <button class="role-mini-btn" type="button" data-resource-delete="${row.resourceId}">Delete</button>
-          </td>
+          <td>${safeText(row.signupId)}</td>
+          <td>${safeText(row.userId)}</td>
+          <td>${safeText(row.fullName)}</td>
+          <td>${safeText(row.role)}</td>
+          <td>${safeText(row.email)}</td>
+          <td>${safeText(formatDate(row.createdAt))}</td>
         `;
-        resourcesBody.appendChild(tr);
-      });
-    }
-
-    function renderContacts() {
-      contactsBody.innerHTML = '';
-      if (!contactRows.length) {
-        contactsBody.innerHTML = '<tr><td colspan="4">No contacts found.</td></tr>';
-        return;
-      }
-
-      contactRows.forEach((row) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${safeText(row.contactId)}</td>
-          <td>${safeText(row.contactName)}</td>
-          <td>${safeText(row.phoneNo)}</td>
-          <td>
-            <button class="role-mini-btn" type="button" data-contact-edit="${row.contactId}">Edit</button>
-            <button class="role-mini-btn" type="button" data-contact-delete="${row.contactId}">Delete</button>
-          </td>
-        `;
-        contactsBody.appendChild(tr);
+        staffBody.appendChild(tr);
       });
     }
 
     async function loadDashboardData() {
       const payload = await api('/api/admin/dashboard-data');
-      const users = Array.isArray(payload.users) ? payload.users : [];
-      const assignments = Array.isArray(payload.assignments) ? payload.assignments : [];
-
-      renderUsers(users);
-      renderAssignments(assignments);
-
       applyStatsToKpis(payload.stats || null);
+      return payload;
     }
 
-    async function loadResources() {
-      const payload = await api('/api/admin/resources');
-      resourceRows = Array.isArray(payload.rows) ? payload.rows : [];
-      renderResources();
-    }
-
-    async function loadContacts() {
-      const payload = await api('/api/admin/emergency-contacts');
-      contactRows = Array.isArray(payload.rows) ? payload.rows : [];
-      renderContacts();
+    async function loadStaffAccounts() {
+      const payload = await api('/api/admin/staff-accounts?limit=10');
+      renderStaffRows(Array.isArray(payload.rows) ? payload.rows : []);
     }
 
     async function refreshAll() {
-      await Promise.all([loadDashboardData(), loadResources(), loadContacts()]);
+      const [dashboard] = await Promise.all([loadDashboardData(), loadStaffAccounts()]);
+      return dashboard;
     }
 
-    usersBody.addEventListener('click', () => {});
+    async function loadEditSignupFromQuery() {
+      const params = new URLSearchParams(window.location.search || '');
+      const raw = params.get('editSignupId');
+      const signupId = Number(raw);
+      if (!Number.isInteger(signupId) || signupId <= 0) return;
 
-    resourcesBody.addEventListener('click', async (event) => {
-      const editId = event.target.getAttribute('data-resource-edit');
-      const deleteId = event.target.getAttribute('data-resource-delete');
+      const dashboard = await api('/api/admin/dashboard-data');
+      const users = Array.isArray(dashboard.users) ? dashboard.users : [];
+      const selectedUser = users.find((row) => Number(row.signupId) === signupId);
 
-      if (editId) {
-        const row = resourceRows.find((item) => String(item.resourceId) === String(editId));
-        if (!row) return;
-        resourceIdInput.value = String(row.resourceId);
-        resourceTitleInput.value = row.title || '';
-        resourceCategoryInput.value = row.category || '';
-        resourceDescriptionInput.value = row.description || '';
-        resourceContentInput.value = row.resourceContent || '';
-        setResourceMessage('Editing resource #' + row.resourceId, false);
+      if (!selectedUser) {
+        setStaffMessage('Requested staff account was not found.', true);
         return;
       }
 
-      if (deleteId) {
-        if (!window.confirm('Delete this resource?')) return;
-        try {
-          await api('/api/admin/resources/' + encodeURIComponent(deleteId), { method: 'DELETE' });
-          await loadResources();
-          setResourceMessage('Resource deleted.', false);
-        } catch (err) {
-          setResourceMessage(err.message || 'Failed to delete resource.', true);
-        }
-      }
-    });
-
-    contactsBody.addEventListener('click', async (event) => {
-      const editId = event.target.getAttribute('data-contact-edit');
-      const deleteId = event.target.getAttribute('data-contact-delete');
-
-      if (editId) {
-        const row = contactRows.find((item) => String(item.contactId) === String(editId));
-        if (!row) return;
-        contactIdInput.value = String(row.contactId);
-        contactNameInput.value = row.contactName || '';
-        contactPhoneInput.value = row.phoneNo || '';
-        setContactMessage('Editing contact #' + row.contactId, false);
+      const role = String(selectedUser.role || '').toLowerCase();
+      if (role !== 'mentor' && role !== 'psychiatrist') {
+        setStaffMessage('Only mentor and psychiatrist accounts can be edited here.', true);
         return;
       }
 
-      if (deleteId) {
-        if (!window.confirm('Delete this emergency contact?')) return;
+      applyEditMode(selectedUser);
+    }
+
+    if (toggleStaffPassword) {
+      toggleStaffPassword.addEventListener('click', () => {
+        const isHidden = staffPasswordInput.type === 'password';
+        staffPasswordInput.type = isHidden ? 'text' : 'password';
+        toggleStaffPassword.textContent = isHidden ? 'Hide' : 'Show';
+        toggleStaffPassword.setAttribute('aria-pressed', String(isHidden));
+      });
+    }
+
+    staffForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        role: staffRoleInput.value,
+        fullName: staffFullnameInput.value.trim(),
+        email: staffEmailInput.value.trim(),
+        password: staffPasswordInput.value,
+      };
+
+      try {
+        const isEditMode = Number.isInteger(editingSignupId) && editingSignupId > 0;
+        const requestUrl = isEditMode
+          ? '/api/admin/staff-accounts/' + encodeURIComponent(editingSignupId)
+          : '/api/admin/staff-accounts';
+        const requestMethod = isEditMode ? 'PUT' : 'POST';
+        const requestBody = isEditMode
+          ? {
+              email: payload.email,
+              fullName: payload.fullName,
+              ...(payload.password ? { password: payload.password } : {}),
+            }
+          : payload;
+
+        const saveResult = await api(requestUrl, {
+          method: requestMethod,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        });
+
+        setStaffMessage(saveResult.message || (isEditMode ? 'Staff login updated successfully.' : 'Staff login created successfully.'), false);
+        resetStaffForm({ keepMessage: true });
+        window.history.replaceState({}, '', '/admin.html');
+
         try {
-          await api('/api/admin/emergency-contacts/' + encodeURIComponent(deleteId), { method: 'DELETE' });
-          await loadContacts();
-          setContactMessage('Emergency contact deleted.', false);
-        } catch (err) {
-          setContactMessage(err.message || 'Failed to delete emergency contact.', true);
+          await loadStaffAccounts();
+          await loadDashboardData();
+        } catch (refreshErr) {
+          setStaffMessage((isEditMode ? 'Staff updated' : 'Staff created') + '. Table refresh failed: ' + (refreshErr.message || 'unknown error'), true);
         }
-      }
-    });
-
-    resourceForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const payload = {
-        title: resourceTitleInput.value.trim(),
-        category: resourceCategoryInput.value.trim(),
-        description: resourceDescriptionInput.value.trim(),
-        resourceContent: resourceContentInput.value.trim(),
-      };
-
-      const editId = resourceIdInput.value.trim();
-
-      try {
-        if (editId) {
-          await api('/api/admin/resources/' + encodeURIComponent(editId), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          setResourceMessage('Resource updated successfully.', false);
-        } else {
-          await api('/api/admin/resources', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          setResourceMessage('Resource created successfully.', false);
-        }
-
-        resetResourceForm();
-        await loadResources();
       } catch (err) {
-        setResourceMessage(err.message || 'Failed to save resource.', true);
+        setStaffMessage(err.message || 'Failed to save staff login.', true);
       }
     });
 
-    contactForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      const payload = {
-        contactName: contactNameInput.value.trim(),
-        phoneNo: contactPhoneInput.value.trim(),
-      };
-
-      const editId = contactIdInput.value.trim();
-
-      try {
-        if (editId) {
-          await api('/api/admin/emergency-contacts/' + encodeURIComponent(editId), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          setContactMessage('Emergency contact updated successfully.', false);
-        } else {
-          await api('/api/admin/emergency-contacts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-          setContactMessage('Emergency contact created successfully.', false);
-        }
-
-        resetContactForm();
-        await loadContacts();
-      } catch (err) {
-        setContactMessage(err.message || 'Failed to save emergency contact.', true);
-      }
+    staffResetBtn.addEventListener('click', () => {
+      resetStaffForm();
+      window.history.replaceState({}, '', '/admin.html');
     });
-
-    resourceResetBtn.addEventListener('click', resetResourceForm);
-    contactResetBtn.addEventListener('click', resetContactForm);
 
     logoutBtn.addEventListener('click', () => {
       sessionStorage.removeItem('tuliza_session_token');
@@ -506,18 +316,11 @@
 
       try {
         await refreshAll();
+        await loadEditSignupFromQuery();
       } catch (err) {
-        usersBody.innerHTML = '<tr><td colspan="6">' + safeText(err.message || 'Failed to load users.') + '</td></tr>';
-        assignmentsBody.innerHTML = '<tr><td colspan="4">Could not load assignments.</td></tr>';
-        resourcesBody.innerHTML = '<tr><td colspan="4">Could not load resources.</td></tr>';
-        contactsBody.innerHTML = '<tr><td colspan="4">Could not load emergency contacts.</td></tr>';
+        setStaffMessage(err.message || 'Failed to load admin data.', true);
       }
-
-      setInterval(() => {
-        refreshAll().catch(() => {});
-      }, 15000);
     })();
   </script>
-
 </body>
 </html>

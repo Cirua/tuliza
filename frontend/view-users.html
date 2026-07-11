@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tuliza - View Users</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav class="navbar" aria-label="Main navigation">
+    <a class="logo" href="/admin.html">
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1C4.7 1 2 3.7 2 7c0 2.1 1.1 4 2.7 5.1L8 15l3.3-2.9C12.9 11 14 9.1 14 7c0-3.3-2.7-6-6-6zm0 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+        </svg>
+      </div>
+      <span class="logo-text">Tuliz<span class="accent-letter">a</span></span>
+    </a>
+    <div class="nav-tabs" role="navigation" aria-label="Admin pages">
+      <a class="nav-tab" href="/admin.html">Admin Home</a>
+      <a class="nav-tab" href="/assignments.html">View Assignments</a>
+      <a class="nav-tab active" href="/view-users.html" aria-current="page">View Users</a>
+    </div>
+  </nav>
+
+  <main class="role-main fade-up">
+    <section class="role-hero">
+      <div>
+        <p class="role-eyebrow">User management</p>
+        <h1>View and edit users</h1>
+        <p class="subtitle">Admin records are hidden. Mentor and psychiatrist rows can be edited or removed.</p>
+      </div>
+    </section>
+
+    <section class="role-layout fade-up fade-up-delay-1" style="grid-template-columns: 1fr;">
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Users</h2>
+          <p id="users-msg" class="role-help-text" style="margin:0;"></p>
+        </div>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Users table">
+            <thead>
+              <tr>
+                <th>Signup ID</th>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Email</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const usersBody = document.getElementById('users-body');
+    const usersMsg = document.getElementById('users-msg');
+
+    function safeText(value) {
+      return String(value || '').trim() || '-';
+    }
+
+    function formatDate(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    async function api(url, options) {
+      const response = await fetch(url, options);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function setMessage(message, isError) {
+      usersMsg.textContent = message || '';
+      usersMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function renderUsers(rows) {
+      usersBody.innerHTML = '';
+      if (!rows.length) {
+        usersBody.innerHTML = '<tr><td colspan="7">No users found.</td></tr>';
+        return;
+      }
+
+      rows.forEach((row) => {
+        const canEditStaff = row.role === 'mentor' || row.role === 'psychiatrist';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.signupId)}</td>
+          <td>${safeText(row.userId)}</td>
+          <td>${safeText(row.displayName)}</td>
+          <td>${safeText(row.role)}</td>
+          <td>${safeText(row.email)}</td>
+          <td>${safeText(formatDate(row.createdAt))}</td>
+          <td>
+            ${canEditStaff ? `<button class="role-mini-btn" type="button" data-edit="${row.signupId}">Edit</button>
+            <button class="role-mini-btn" type="button" data-delete="${row.signupId}">Delete</button>` : '-'}
+          </td>
+        `;
+        usersBody.appendChild(tr);
+      });
+    }
+
+    async function loadUsers() {
+      const payload = await api('/api/admin/dashboard-data');
+      const allUsers = Array.isArray(payload.users) ? payload.users : [];
+      const filtered = allUsers.filter((row) => String(row.role || '').toLowerCase() !== 'admin');
+      renderUsers(filtered);
+    }
+
+    usersBody.addEventListener('click', async (event) => {
+      const editId = event.target.getAttribute('data-edit');
+      const deleteId = event.target.getAttribute('data-delete');
+
+      if (editId) {
+        window.location.href = '/admin.html?editSignupId=' + encodeURIComponent(editId);
+        return;
+      }
+
+      if (deleteId) {
+        if (!window.confirm('Delete this staff login account?')) return;
+        try {
+          await api('/api/admin/staff-accounts/' + encodeURIComponent(deleteId), { method: 'DELETE' });
+          setMessage('User deleted successfully.', false);
+          await loadUsers();
+        } catch (err) {
+          setMessage(err.message || 'Failed to delete user.', true);
+        }
+      }
+    });
+
+    (async function init() {
+      let sessionUser = {};
+      try {
+        sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+      } catch (_) {
+        sessionUser = {};
+      }
+
+      if (String(sessionUser.role || '').toLowerCase() !== 'admin') {
+        window.location.href = '/account.html';
+        return;
+      }
+
+      try {
+        await loadUsers();
+      } catch (err) {
+        setMessage(err.message || 'Failed to load users.', true);
+      }
+    })();
+  </script>
+</body>
+</html>
