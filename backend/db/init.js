@@ -1,3 +1,22 @@
+async function clearCoreUserRecords(dbPool) {
+  await dbPool.query('DELETE FROM assignments')
+  await dbPool.query('DELETE FROM questionnaire')
+
+  // Messages reference profile IDs without ON DELETE CASCADE, so clear them first.
+  await dbPool.query('DELETE FROM messages WHERE student_id IS NOT NULL OR mentor_id IS NOT NULL OR psychiatrist_id IS NOT NULL')
+
+  await dbPool.query('DELETE FROM student')
+  await dbPool.query('DELETE FROM mentor')
+  await dbPool.query('DELETE FROM psychiatrist')
+
+  await dbPool.query(`
+    DELETE FROM signup
+    WHERE LOWER(COALESCE(role, role_name, '')) IN ('student', 'mentor', 'psychiatrist', 'psychologist')
+  `)
+}
+
+let hasClearedCoreUserRecordsInProcess = false
+
 async function initializeDatabase(dbPool) {
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS roles (
@@ -69,6 +88,13 @@ async function initializeDatabase(dbPool) {
   await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS signup_id INT')
   await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS email VARCHAR(150)')
   await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS username VARCHAR(100)')
+  await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS full_name VARCHAR(100)')
+  await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
+  await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS student_identifier VARCHAR(50)')
+  await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS gender VARCHAR(20)')
+  await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+  await dbPool.query('ALTER TABLE student ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
+  await dbPool.query('ALTER TABLE student ADD COLUMN IF NOT EXISTS mode_of_payment VARCHAR(50)')
   await dbPool.query('ALTER TABLE student DROP COLUMN IF EXISTS questionnaire')
   await dbPool.query(`
     DO $$
@@ -112,6 +138,11 @@ async function initializeDatabase(dbPool) {
   await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS signup_id INT')
   await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS email VARCHAR(150)')
   await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS full_name VARCHAR(120)')
+  await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
+  await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+  await dbPool.query('ALTER TABLE mentor ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
+  await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS bio VARCHAR(100)')
+  await dbPool.query('ALTER TABLE mentor ADD COLUMN IF NOT EXISTS student_id INT')
   await dbPool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_mentor_signup_unique ON mentor(signup_id)')
 
   await dbPool.query(`
@@ -128,6 +159,16 @@ async function initializeDatabase(dbPool) {
   await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS signup_id INT')
   await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS email VARCHAR(150)')
   await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS full_name VARCHAR(120)')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS phone_no BIGINT')
+  await dbPool.query('ALTER TABLE psychiatrist ALTER COLUMN phone_no TYPE BIGINT USING phone_no::BIGINT')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS certification VARCHAR(100)')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS licence_number VARCHAR(100)')
+  await dbPool.query('ALTER TABLE psychiatrist ALTER COLUMN licence_number TYPE VARCHAR(100) USING licence_number::TEXT')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS years_of_experience INT')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS billing_details VARCHAR(255)')
+  await dbPool.query('ALTER TABLE psychiatrist ALTER COLUMN billing_details TYPE VARCHAR(255)')
+  await dbPool.query('ALTER TABLE psychiatrist ADD COLUMN IF NOT EXISTS student_id INT')
   await dbPool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_psychiatrist_signup_unique ON psychiatrist(signup_id)')
 
   await dbPool.query(`
@@ -158,6 +199,8 @@ async function initializeDatabase(dbPool) {
   await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS period_affected VARCHAR(50)')
   await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS support_type VARCHAR(50)')
   await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS support_preferences VARCHAR(50)')
+  await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS support_preference VARCHAR(50)')
+  await dbPool.query('ALTER TABLE questionnaire ALTER COLUMN support_preferences TYPE TEXT')
   await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS religion TEXT')
   await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS religion_type VARCHAR(50)')
   await dbPool.query('ALTER TABLE questionnaire ADD COLUMN IF NOT EXISTS spiritual_status VARCHAR(50)')
@@ -451,6 +494,24 @@ async function initializeDatabase(dbPool) {
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_therapist_availability_lookup ON therapist_availability(therapist_type, therapist_id, start_at)')
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_appointments_lookup ON appointments(therapist_type, therapist_id, slot_start)')
   await dbPool.query('CREATE INDEX IF NOT EXISTS idx_appointments_availability ON appointments(availability_id)')
+
+  await dbPool.query(`
+    CREATE TABLE IF NOT EXISTS admins (
+      admin_id SERIAL PRIMARY KEY,
+      password_hash VARCHAR(255),
+      contact_id INT,
+      resource_id INT,
+      signup_id INT UNIQUE
+    )
+  `)
+  await dbPool.query('ALTER TABLE admins ADD COLUMN IF NOT EXISTS signup_id INT UNIQUE')
+
+  const shouldClearCoreUserRecords = String(process.env.CLEAR_CORE_USER_RECORDS || '').trim().toLowerCase() === 'true'
+  if (shouldClearCoreUserRecords && !hasClearedCoreUserRecordsInProcess) {
+    console.warn('[DANGER] CLEAR_CORE_USER_RECORDS=true detected. Running one-time core user data cleanup for this process.')
+    await clearCoreUserRecords(dbPool)
+    hasClearedCoreUserRecordsInProcess = true
+  }
 }
 
 module.exports = { initializeDatabase }

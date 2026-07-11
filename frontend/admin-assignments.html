@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tuliza - View Assignments</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav class="navbar" aria-label="Main navigation">
+    <a class="logo" href="/admin.html">
+      <div class="logo-mark" aria-hidden="true">
+        <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 1C4.7 1 2 3.7 2 7c0 2.1 1.1 4 2.7 5.1L8 15l3.3-2.9C12.9 11 14 9.1 14 7c0-3.3-2.7-6-6-6zm0 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/>
+        </svg>
+      </div>
+      <span class="logo-text">Tuliz<span class="accent-letter">a</span></span>
+    </a>
+    <div class="nav-tabs" role="navigation" aria-label="Admin pages">
+      <a class="nav-tab" href="/admin.html">Admin</a>
+      <a class="nav-tab" href="/admin-users.html">View Users</a>
+      <a class="nav-tab active" href="/admin-assignments.html" aria-current="page">View Assignments</a>
+      <button id="logout-btn" class="nav-tab" type="button">Logout</button>
+    </div>
+  </nav>
+
+  <main class="role-main fade-up">
+    <section class="role-hero">
+      <div>
+        <p class="role-eyebrow">Platform operations</p>
+        <h1>View assignments</h1>
+        <p class="subtitle">See student-to-mentor and psychiatrist assignments on a dedicated page.</p>
+      </div>
+    </section>
+
+    <section class="role-layout fade-up fade-up-delay-1" style="grid-template-columns: 1fr;">
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Assignments</h2>
+        </div>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Assignments table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Student</th>
+                <th>Mentor</th>
+                <th>Psychiatrist</th>
+              </tr>
+            </thead>
+            <tbody id="assignments-body"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const assignmentsBody = document.getElementById('assignments-body');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    function safeText(value) {
+      return String(value || '').trim() || '-';
+    }
+
+    async function api(url, options) {
+      const response = await fetch(url, options);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || 'Request failed');
+      }
+      return payload;
+    }
+
+    function renderAssignments(rows) {
+      assignmentsBody.innerHTML = '';
+      if (!rows.length) {
+        assignmentsBody.innerHTML = '<tr><td colspan="4">No assignments found.</td></tr>';
+        return;
+      }
+
+      rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.assignmentId)}</td>
+          <td>${safeText(row.studentUsername)} (${safeText(row.studentId)})</td>
+          <td>${safeText(row.mentorName)} (${safeText(row.mentorId)})</td>
+          <td>${safeText(row.psychiatristName)} (${safeText(row.psychiatristId)})</td>
+        `;
+        assignmentsBody.appendChild(tr);
+      });
+    }
+
+    async function loadAssignments() {
+      const payload = await api('/api/admin/dashboard-data');
+      const assignments = Array.isArray(payload.assignments) ? payload.assignments : [];
+      renderAssignments(assignments);
+    }
+
+    logoutBtn.addEventListener('click', () => {
+      sessionStorage.removeItem('tuliza_session_token');
+      sessionStorage.removeItem('tuliza_session_user');
+      window.location.href = '/account.html';
+    });
+
+    (async function enforceRoleAccess() {
+      let sessionUser = {};
+      try {
+        sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+      } catch (_) {
+        sessionUser = {};
+      }
+
+      if (String(sessionUser.role || '').toLowerCase() !== 'admin') {
+        window.location.href = '/account.html';
+        return;
+      }
+
+      try {
+        await loadAssignments();
+      } catch (err) {
+        assignmentsBody.innerHTML = '<tr><td colspan="4">' + safeText(err.message || 'Failed to load assignments.') + '</td></tr>';
+      }
+
+      setInterval(() => {
+        loadAssignments().catch(() => {});
+      }, 15000);
+    })();
+  </script>
+</body>
+</html>

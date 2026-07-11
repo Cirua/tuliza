@@ -21,6 +21,8 @@
     </a>
     <div class="nav-tabs" role="navigation" aria-label="Admin pages">
       <a class="nav-tab active" href="/admin.html" aria-current="page">Admin</a>
+      <a class="nav-tab" href="/admin-users.html">View Users</a>
+      <a class="nav-tab" href="/admin-assignments.html">View Assignments</a>
       <button id="logout-btn" class="nav-tab" type="button">Logout</button>
     </div>
   </nav>
@@ -30,7 +32,7 @@
       <div>
         <p class="role-eyebrow">Platform operations</p>
         <h1>Database operations dashboard</h1>
-        <p class="subtitle">View users and assignments, then manage resources and emergency contacts directly.</p>
+        <p class="subtitle">Manage staff logins, resources, and emergency contacts from one place.</p>
       </div>
     </section>
 
@@ -60,42 +62,38 @@
     <section class="role-layout fade-up fade-up-delay-2" style="grid-template-columns: 1fr;">
       <article class="role-panel">
         <div class="role-panel-head">
-          <h2>Users</h2>
+          <h2>Add Staff Login</h2>
         </div>
-        <div class="role-table-wrap">
-          <table class="role-table" aria-label="Users table">
-            <thead>
-              <tr>
-                <th>Signup ID</th>
-                <th>User ID</th>
-                <th>Name</th>
-                <th>Role</th>
-                <th>Email</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody id="users-body"></tbody>
-          </table>
-        </div>
-      </article>
-
-      <article class="role-panel">
-        <div class="role-panel-head">
-          <h2>Assignments</h2>
-        </div>
-        <div class="role-table-wrap">
-          <table class="role-table" aria-label="Assignments table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Student</th>
-                <th>Mentor</th>
-                <th>Psychiatrist</th>
-              </tr>
-            </thead>
-            <tbody id="assignments-body"></tbody>
-          </table>
-        </div>
+        <form id="staff-account-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
+          <input id="staff-signup-id" type="hidden" />
+          <div class="form-group">
+            <label class="form-label" for="staff-role">Role</label>
+            <select id="staff-role" class="form-select" required>
+              <option value="mentor">Mentor</option>
+              <option value="psychiatrist">Psychiatrist</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label" for="staff-full-name">Full name (optional)</label><input id="staff-full-name" class="form-input" /></div>
+          <div class="form-group"><label class="form-label" for="staff-email">Email</label><input id="staff-email" class="form-input" type="email" required /></div>
+          <div class="form-group">
+            <label class="form-label" for="staff-password">Password</label>
+            <div class="password-field">
+              <input id="staff-password" class="form-input" type="password" required />
+              <button
+                type="button"
+                id="toggle-staff-password"
+                class="password-toggle"
+                aria-label="Show password"
+                aria-pressed="false"
+              >Show</button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button id="staff-account-submit" class="btn-primary" type="submit">Create staff login</button>
+            <button id="staff-account-reset" class="btn-ghost-modal" type="button">Clear</button>
+          </div>
+          <p id="staff-account-msg" class="role-help-text"></p>
+        </form>
       </article>
 
       <article class="role-panel">
@@ -162,11 +160,20 @@
   </main>
 
   <script>
-    const usersBody = document.getElementById('users-body');
-    const assignmentsBody = document.getElementById('assignments-body');
     const resourcesBody = document.getElementById('resources-body');
     const contactsBody = document.getElementById('contacts-body');
     const logoutBtn = document.getElementById('logout-btn');
+
+    const staffAccountForm = document.getElementById('staff-account-form');
+    const staffSignupIdInput = document.getElementById('staff-signup-id');
+    const staffRoleInput = document.getElementById('staff-role');
+    const staffFullNameInput = document.getElementById('staff-full-name');
+    const staffEmailInput = document.getElementById('staff-email');
+    const staffPasswordInput = document.getElementById('staff-password');
+    const toggleStaffPasswordButton = document.getElementById('toggle-staff-password');
+    const staffAccountSubmitBtn = document.getElementById('staff-account-submit');
+    const staffAccountResetBtn = document.getElementById('staff-account-reset');
+    const staffAccountMsg = document.getElementById('staff-account-msg');
 
     const resourceForm = document.getElementById('resource-form');
     const resourceIdInput = document.getElementById('resource-id');
@@ -221,6 +228,11 @@
       contactMsg.style.color = isError ? '#B42318' : '#146C43';
     }
 
+    function setStaffAccountMessage(message, isError) {
+      staffAccountMsg.textContent = message || '';
+      staffAccountMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
 
     function resetResourceForm() {
       resourceIdInput.value = '';
@@ -238,45 +250,23 @@
       setContactMessage('', false);
     }
 
-
-    function renderUsers(rows) {
-      usersBody.innerHTML = '';
-      if (!rows.length) {
-        usersBody.innerHTML = '<tr><td colspan="6">No users found.</td></tr>';
-        return;
+    function resetStaffAccountForm() {
+      staffSignupIdInput.value = '';
+      staffRoleInput.value = 'mentor';
+      staffRoleInput.disabled = false;
+      staffFullNameInput.value = '';
+      staffEmailInput.value = '';
+      staffPasswordInput.value = '';
+      staffPasswordInput.type = 'password';
+      if (toggleStaffPasswordButton) {
+        toggleStaffPasswordButton.textContent = 'Show';
+        toggleStaffPasswordButton.setAttribute('aria-pressed', 'false');
+        toggleStaffPasswordButton.setAttribute('aria-label', 'Show password');
       }
-
-      rows.forEach((row) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${safeText(row.signupId)}</td>
-          <td>${safeText(row.userId)}</td>
-          <td>${safeText(row.displayName)}</td>
-          <td>${safeText(row.role)}</td>
-          <td>${safeText(row.email)}</td>
-          <td>${safeText(formatDate(row.createdAt))}</td>
-        `;
-        usersBody.appendChild(tr);
-      });
-    }
-
-    function renderAssignments(rows) {
-      assignmentsBody.innerHTML = '';
-      if (!rows.length) {
-        assignmentsBody.innerHTML = '<tr><td colspan="4">No assignments found.</td></tr>';
-        return;
-      }
-
-      rows.forEach((row) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${safeText(row.assignmentId)}</td>
-          <td>${safeText(row.studentUsername)} (${safeText(row.studentId)})</td>
-          <td>${safeText(row.mentorName)} (${safeText(row.mentorId)})</td>
-          <td>${safeText(row.psychiatristName)} (${safeText(row.psychiatristId)})</td>
-        `;
-        assignmentsBody.appendChild(tr);
-      });
+      staffPasswordInput.required = true;
+      staffPasswordInput.placeholder = '';
+      staffAccountSubmitBtn.textContent = 'Create staff login';
+      setStaffAccountMessage('', false);
     }
 
     function applyStatsToKpis(stats) {
@@ -333,12 +323,6 @@
 
     async function loadDashboardData() {
       const payload = await api('/api/admin/dashboard-data');
-      const users = Array.isArray(payload.users) ? payload.users : [];
-      const assignments = Array.isArray(payload.assignments) ? payload.assignments : [];
-
-      renderUsers(users);
-      renderAssignments(assignments);
-
       applyStatsToKpis(payload.stats || null);
     }
 
@@ -357,8 +341,6 @@
     async function refreshAll() {
       await Promise.all([loadDashboardData(), loadResources(), loadContacts()]);
     }
-
-    usersBody.addEventListener('click', () => {});
 
     resourcesBody.addEventListener('click', async (event) => {
       const editId = event.target.getAttribute('data-resource-edit');
@@ -482,8 +464,53 @@
       }
     });
 
+    staffAccountForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        role: staffRoleInput.value,
+        fullName: staffFullNameInput.value.trim(),
+        email: staffEmailInput.value.trim(),
+        password: staffPasswordInput.value,
+      };
+
+      try {
+        const response = await api('/api/admin/staff-accounts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        resetStaffAccountForm();
+        setStaffAccountMessage(response.message || 'Staff login saved successfully.', false);
+
+        try {
+          await loadDashboardData();
+        } catch (refreshErr) {
+          console.error('Staff login saved, but dashboard refresh failed:', refreshErr);
+          setStaffAccountMessage(
+            (response.message || 'Staff login saved successfully.') + ' Saved, but the users table could not refresh.',
+            true
+          );
+        }
+      } catch (err) {
+        setStaffAccountMessage(err.message || 'Failed to save staff login.', true);
+      }
+    });
+
     resourceResetBtn.addEventListener('click', resetResourceForm);
     contactResetBtn.addEventListener('click', resetContactForm);
+    staffAccountResetBtn.addEventListener('click', resetStaffAccountForm);
+
+    if (toggleStaffPasswordButton && staffPasswordInput) {
+      toggleStaffPasswordButton.addEventListener('click', () => {
+        const isHidden = staffPasswordInput.type === 'password';
+        staffPasswordInput.type = isHidden ? 'text' : 'password';
+        toggleStaffPasswordButton.textContent = isHidden ? 'Hide' : 'Show';
+        toggleStaffPasswordButton.setAttribute('aria-pressed', String(isHidden));
+        toggleStaffPasswordButton.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+      });
+    }
 
     logoutBtn.addEventListener('click', () => {
       sessionStorage.removeItem('tuliza_session_token');
@@ -507,8 +534,6 @@
       try {
         await refreshAll();
       } catch (err) {
-        usersBody.innerHTML = '<tr><td colspan="6">' + safeText(err.message || 'Failed to load users.') + '</td></tr>';
-        assignmentsBody.innerHTML = '<tr><td colspan="4">Could not load assignments.</td></tr>';
         resourcesBody.innerHTML = '<tr><td colspan="4">Could not load resources.</td></tr>';
         contactsBody.innerHTML = '<tr><td colspan="4">Could not load emergency contacts.</td></tr>';
       }

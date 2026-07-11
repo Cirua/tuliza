@@ -25,7 +25,7 @@
     <section class="auth-hero-card fade-up">
       <span class="match-eyebrow">Anonymous first</span>
       <h1>Login or create your Tuliza account</h1>
-      <p class="subtitle">Create your account by role, then continue to the correct dashboard.</p>
+      <p class="subtitle">Create a student account, then log in and get redirected to your dashboard.</p>
     </section>
 
     <section class="auth-layout fade-up fade-up-delay-1">
@@ -33,9 +33,9 @@
         <h2>How access works</h2>
         <ul class="role-list">
           <li class="role-list-item"><div><strong>Step 1</strong><p>Choose login or sign up</p></div></li>
-          <li class="role-list-item"><div><strong>Step 2</strong><p>Select role: student, mentor, psychiatrist, or admin</p></div></li>
-          <li class="role-list-item"><div><strong>Step 3</strong><p>Students complete a quick matching questionnaire</p></div></li>
-          <li class="role-list-item"><div><strong>Step 4</strong><p>Mentors and psychiatrists complete values profile</p></div></li>
+          <li class="role-list-item"><div><strong>Step 2</strong><p>Sign up creates student accounts only</p></div></li>
+          <li class="role-list-item"><div><strong>Step 3</strong><p>Mentor and psychiatrist accounts are created by admins</p></div></li>
+          <li class="role-list-item"><div><strong>Step 4</strong><p>Login redirects each user to their dashboard automatically</p></div></li>
         </ul>
       </aside>
 
@@ -51,16 +51,6 @@
             <div class="form-group">
               <label class="form-label" for="login-alias">Email</label>
               <input class="form-input" id="login-alias" required type="email" placeholder="e.g. johndoe@gmail.com" />
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="login-role">Role</label>
-              <select class="form-select" id="login-role" required>
-                <option value="">Select role</option>
-                <option value="student">Student</option>
-                <option value="mentor">Mentor</option>
-                <option value="psychiatrist">Psychiatrist</option>
-                <option value="admin">Admin</option>
-              </select>
             </div>
             <div class="form-group">
               <label class="form-label" for="login-password">Password</label>
@@ -88,18 +78,17 @@
               <input class="form-input" id="signup-alias" required type="email" placeholder="e.g. johndoe@gmail.com" />
             </div>
             <div class="form-group">
-              <label class="form-label" for="signup-role">Role</label>
-              <select class="form-select" id="signup-role" required>
-                <option value="">Select role</option>
-                <option value="student">Student</option>
-                <option value="mentor">Mentor</option>
-                <option value="psychiatrist">Psychiatrist</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div class="form-group">
               <label class="form-label" for="signup-password">Password</label>
-              <input class="form-input" id="signup-password" required type="password" minlength="6" placeholder="At least 6 characters" />
+              <div class="password-field">
+                <input class="form-input" id="signup-password" required type="password" minlength="6" placeholder="At least 6 characters" />
+                <button
+                  type="button"
+                  id="toggle-signup-password"
+                  class="password-toggle"
+                  aria-label="Show password"
+                  aria-pressed="false"
+                >Show</button>
+              </div>
             </div>
             <p id="signup-message" class="role-help-text" aria-live="polite"></p>
             <button class="btn-primary" type="submit">Create account</button>
@@ -110,160 +99,7 @@
 
   </main>
 
-  <script>
-    function isStrongPassword(password) {
-      return /^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{7,}$/.test(password || '');
-    }
+  <script src="/js/auth/account.js"></script>
 
-    function getRoleRedirect(role) {
-      if (role === 'mentor') return '/mentor.html';
-      if (role === 'psychiatrist') return '/psychologist.html';
-      if (role === 'admin') return '/admin.html';
-      return '/student.html';
-    }
-
-    const tabLogin = document.getElementById('tab-login');
-    const tabSignup = document.getElementById('tab-signup');
-    const paneLogin = document.getElementById('pane-login');
-    const paneSignup = document.getElementById('pane-signup');
-
-    const loginForm = document.getElementById('login-form');
-    const signupForm = document.getElementById('signup-form');
-    const loginMessage = document.getElementById('login-message');
-    const signupMessage = document.getElementById('signup-message');
-    const loginPasswordInput = document.getElementById('login-password');
-    const toggleLoginPasswordButton = document.getElementById('toggle-login-password');
-
-    function enforceRoleChipAccess() {
-      const chips = Array.from(document.querySelectorAll('.auth-role-preview .role-chip'));
-      chips.forEach((chip) => {
-        chip.addEventListener('click', (event) => {
-          const href = chip.getAttribute('href') || '';
-          if (!href || href === '/student.html') return;
-
-          let sessionUser = null;
-          try {
-            sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
-          } catch (_) {
-            sessionUser = null;
-          }
-
-          const role = String(sessionUser?.role || '').toLowerCase();
-          const expectedRole = href.includes('mentor')
-            ? 'mentor'
-            : href.includes('psychologist')
-              ? 'psychiatrist'
-              : href.includes('admin')
-                ? 'admin'
-                : 'student';
-
-          if (role !== expectedRole) {
-            event.preventDefault();
-            loginMessage.textContent = `Please login as ${expectedRole} to access that dashboard.`;
-          }
-        });
-      });
-    }
-
-    function activateTab(mode) {
-      const isLogin = mode === 'login';
-      tabLogin.classList.toggle('active', isLogin);
-      tabSignup.classList.toggle('active', !isLogin);
-      tabLogin.setAttribute('aria-selected', String(isLogin));
-      tabSignup.setAttribute('aria-selected', String(!isLogin));
-      paneLogin.style.display = isLogin ? '' : 'none';
-      paneSignup.style.display = isLogin ? 'none' : '';
-    }
-
-    tabLogin.addEventListener('click', () => activateTab('login'));
-    tabSignup.addEventListener('click', () => activateTab('signup'));
-
-    if (toggleLoginPasswordButton && loginPasswordInput) {
-      toggleLoginPasswordButton.addEventListener('click', () => {
-        const isHidden = loginPasswordInput.type === 'password';
-        loginPasswordInput.type = isHidden ? 'text' : 'password';
-        toggleLoginPasswordButton.textContent = isHidden ? 'Hide' : 'Show';
-        toggleLoginPasswordButton.setAttribute('aria-pressed', String(isHidden));
-        toggleLoginPasswordButton.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-      });
-    }
-
-    loginForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      loginMessage.textContent = '';
-
-      const email = document.getElementById('login-alias').value.trim();
-      const role = document.getElementById('login-role').value;
-      const password = document.getElementById('login-password').value;
-
-      try {
-        const response = await fetch('/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, role, password }),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          loginMessage.textContent = payload.error || 'Login failed.';
-          return;
-        }
-
-        if (payload.sessionToken) {
-          sessionStorage.setItem('tuliza_session_token', payload.sessionToken);
-        }
-
-        sessionStorage.setItem('tuliza_session_user', JSON.stringify({
-          email,
-          role: payload.role || role,
-          userId: payload.userId || null,
-          signupId: payload.signupId,
-        }));
-
-        loginMessage.textContent = 'Login successful. Redirecting...';
-        window.location.href = payload.redirectTo || getRoleRedirect(role);
-      } catch (_) {
-        loginMessage.textContent = 'Could not reach server.';
-      }
-    });
-
-    signupForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      signupMessage.textContent = '';
-
-      const email = document.getElementById('signup-alias').value.trim();
-      const role = document.getElementById('signup-role').value;
-      const password = document.getElementById('signup-password').value;
-
-      if (!isStrongPassword(password)) {
-        signupMessage.textContent = 'Password must be more than 6 characters and include uppercase, lowercase, and a special character.';
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/signup', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, role, password }),
-        });
-
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          signupMessage.textContent = payload.error || 'Signup failed.';
-          return;
-        }
-
-        signupMessage.textContent = payload.message || 'Signup successful.';
-        activateTab('login');
-        document.getElementById('login-alias').value = email;
-        document.getElementById('login-role').value = role;
-      } catch (_) {
-        signupMessage.textContent = 'Could not reach server.';
-      }
-    });
-
-    activateTab('login');
-    enforceRoleChipAccess();
-  </script>
 </body>
 </html>
