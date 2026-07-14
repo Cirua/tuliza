@@ -37,6 +37,13 @@
           <p class="greeting-sub" id="greeting-sub">Welcome back</p>
           <h1 class="greeting-title">How are you feeling <em>today?</em></h1>
         </div>
+        
+        <div class="fade-up" style="display:flex; justify-content:flex-end; margin-top:10px;">
+          <button id="open-crisis-modal-btn" class="emergency-btn" type="button" aria-haspopup="dialog" aria-controls="crisis-modal">
+            <span class="pulse-ring" aria-hidden="true"></span>
+            Emergency contacts
+          </button>
+        </div>
 <br>
         <section class="summary-card fade-up fade-up-delay-1" aria-label="Your dashboard summary">
           <div class="summary-head">
@@ -172,24 +179,16 @@
         If you're in immediate distress or feel unsafe, please reach out right now. These lines are free, confidential, and available 24/7.
       </p>
 
-      <div class="crisis-contact">
-        <div class="crisis-contact-name">Befrienders Kenya</div>
-        <div class="crisis-contact-num">0722 178 177</div>
-      </div>
-
-      <div class="crisis-contact">
-        <div class="crisis-contact-name">Strathmore Counselling</div>
-        <div class="crisis-contact-num">0700 000 000</div>
-      </div>
-
-      <div class="crisis-contact">
-        <div class="crisis-contact-name">Emergency Services</div>
-        <div class="crisis-contact-num">999</div>
+      <div id="crisis-contact-list">
+        <div class="crisis-contact">
+          <div class="crisis-contact-name">Emergency Services</div>
+          <div class="crisis-contact-num">999</div>
+        </div>
       </div>
 
       <div class="modal-actions" style="margin-top:20px">
-        <a class="btn-primary" style="background:var(--danger)" href="tel:999">Call now</a>
-        <a class="btn-ghost-modal" href="/student.html">Close</a>
+        <a class="btn-primary" id="crisis-call-now" style="background:var(--danger)" href="tel:999">Call now</a>
+          <button class="btn-ghost-modal" id="close-crisis-modal-btn" type="button">Close</button>
       </div>
     </div>
   </div>
@@ -243,6 +242,155 @@
       const greeting = hour < 12 ? 'Good morning' : (hour < 18 ? 'Good afternoon' : 'Good evening');
       const alias = formatAliasFromSession(sessionUser);
       greetingEl.textContent = `${greeting}, ${alias}`;
+    }
+
+    function normalizePhoneForDial(value) {
+      const digits = String(value || '').replace(/\D+/g, '');
+      if (!digits) return '';
+      if (digits === '999' || digits === '112') return digits;
+      if (digits.length === 9) return `+254${digits}`;
+      if (digits.length === 10 && digits.startsWith('0')) return `+254${digits.slice(1)}`;
+      return digits;
+    }
+
+    function formatPhoneDisplay(value) {
+      const digits = String(value || '').replace(/\D+/g, '');
+      if (!digits) return '';
+      if (digits === '999' || digits === '112') return digits;
+      if (digits.length === 9) return `0${digits}`;
+      return digits;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    
+    async function copyTextToClipboard(value) {
+      const text = String(value || '').trim();
+      if (!text) return false;
+
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (_) {
+        // Fallback below
+      }
+
+      try {
+        const input = document.createElement('input');
+        input.value = text;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(input);
+        return Boolean(ok);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function wireEmergencyModal() {
+      const crisisModal = document.getElementById('crisis-modal');
+      const openBtn = document.getElementById('open-crisis-modal-btn');
+      const closeBtn = document.getElementById('close-crisis-modal-btn');
+      const listEl = document.getElementById('crisis-contact-list');
+      if (!crisisModal || !openBtn || !closeBtn || !listEl) return;
+
+      const openModal = () => {
+        crisisModal.style.display = 'flex';
+      };
+      const closeModal = () => {
+        crisisModal.style.display = 'none';
+      };
+
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      crisisModal.addEventListener('click', (event) => {
+        if (event.target === crisisModal) closeModal();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && crisisModal.style.display === 'flex') {
+          closeModal();
+        }
+      });
+
+      listEl.addEventListener('click', async (event) => {
+        const copyButton = event.target.closest('[data-copy-number]');
+        if (!copyButton) return;
+
+        const number = String(copyButton.getAttribute('data-copy-number') || '').trim();
+        const copied = await copyTextToClipboard(number);
+        const original = copyButton.textContent;
+        copyButton.textContent = copied ? 'Copied' : 'Copy failed';
+        setTimeout(() => {
+          copyButton.textContent = original;
+        }, 1200);
+      });
+    }
+
+    async function loadEmergencyContacts() {
+      const listEl = document.getElementById('crisis-contact-list');
+      const callNowEl = document.getElementById('crisis-call-now');
+      if (!listEl) return;
+
+      let sessionUser = {};
+      try {
+        sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+      } catch (_) {
+        sessionUser = {};
+      }
+
+      const studentId = Number(sessionUser.userId || sessionUser.signupId || 0);
+      const query = Number.isInteger(studentId) && studentId > 0
+        ? `?studentId=${encodeURIComponent(String(studentId))}`
+        : '';
+
+      try {
+        const response = await fetch(`/api/emergency-contacts${query}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) return;
+
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) return;
+
+        listEl.innerHTML = rows.map((row) => {
+          const name = escapeHtml(String(row.contactName || 'Emergency contact').trim());
+          const display = escapeHtml(formatPhoneDisplay(row.phoneNo));
+          const dial = normalizePhoneForDial(row.phoneNo);
+          const href = dial ? `tel:${dial}` : '#';
+          const copyRaw = String(row.phoneNo || '').replace(/\D+/g, '');
+          return `
+            <div class="crisis-contact" style="display:flex; flex-direction:column; align-items:stretch; gap:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                <div class="crisis-contact-name">${name}</div>
+                <div class="crisis-contact-num">${display || 'Not available'}</div>
+              </div>
+              <div style="display:flex; gap:8px; justify-content:flex-end;">
+                <a class="btn-primary" style="padding:8px 12px; font-size:12px;" href="${href}">Call</a>
+                <button class="btn-ghost-modal" style="padding:8px 12px; font-size:12px;" type="button" data-copy-number="${escapeHtml(copyRaw)}">Copy number</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        const firstDial = normalizePhoneForDial(rows[0]?.phoneNo || '');
+        if (callNowEl && firstDial) {
+          callNowEl.href = `tel:${firstDial}`;
+        }
+      } catch (_) {
+        // Keep fallback contact when API is unavailable.
+      }
     }
 
     async function loadAssignedSupportProfile() {
@@ -411,6 +559,8 @@
     }
 
     loadAssignedSupportProfile();
+    loadEmergencyContacts();
+    wireEmergencyModal();
     initializeStudentDashboardInteractions();
   </script>
 

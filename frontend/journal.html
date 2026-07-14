@@ -67,6 +67,20 @@
     </section>
   </main>
 
+  <div class="modal-overlay" id="journal-delete-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="journal-delete-title">
+    <div class="modal" style="max-width:460px; border-top: 5px solid var(--danger);">
+      <div class="modal-header">
+        <p class="modal-eyebrow" style="color:var(--danger);">Delete entry</p>
+        <h2 class="modal-title" id="journal-delete-title">Delete this journal entry?</h2>
+        <p class="modal-subtitle">This action cannot be undone.</p>
+      </div>
+      <div class="modal-actions">
+        <button id="journal-delete-cancel" class="btn-ghost-modal" type="button">Cancel</button>
+        <button id="journal-delete-confirm" class="btn-primary" style="background:var(--danger);" type="button">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const dateLabel = document.getElementById('date-label');
     const journalInput = document.getElementById('journal-input');
@@ -77,10 +91,14 @@
     const journalMood = document.getElementById('journal-mood');
     const historyList = document.getElementById('journal-history-list');
     const editorLabel = document.querySelector('.editor .toolbar strong');
+    const journalDeleteModal = document.getElementById('journal-delete-modal');
+    const journalDeleteCancel = document.getElementById('journal-delete-cancel');
+    const journalDeleteConfirm = document.getElementById('journal-delete-confirm');
 
     let resolvedStudentId = null;
     let editingJournalId = null;
     let historyEntries = [];
+    let pendingDeleteJournalId = null;
 
     function updateDateLabel() {
       const now = new Date();
@@ -285,6 +303,16 @@
       }
     }
 
+    function closeDeleteModal() {
+      pendingDeleteJournalId = null;
+      journalDeleteModal.style.display = 'none';
+    }
+
+    function openDeleteModal(journalId) {
+      pendingDeleteJournalId = Number(journalId);
+      journalDeleteModal.style.display = 'flex';
+    }
+
     journalInput.addEventListener('input', updateWordCount);
     saveButton.addEventListener('click', saveEntry);
 
@@ -301,17 +329,39 @@
       }
 
       if (deleteId) {
-        if (!window.confirm('Delete this journal entry?')) return;
-        try {
-          await deleteEntry(deleteId);
-          if (String(editingJournalId) === String(deleteId)) {
-            resetEditor();
-          }
-          journalFeedback.textContent = 'Journal entry deleted.';
-          await loadHistory();
-        } catch (err) {
-          journalFeedback.textContent = err.message || 'Failed to delete journal entry.';
+        openDeleteModal(deleteId);
+      }
+    });
+
+    journalDeleteCancel.addEventListener('click', closeDeleteModal);
+    journalDeleteModal.addEventListener('click', (event) => {
+      if (event.target === journalDeleteModal) closeDeleteModal();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && journalDeleteModal.style.display === 'flex') {
+        closeDeleteModal();
+      }
+    });
+
+    journalDeleteConfirm.addEventListener('click', async () => {
+      if (!pendingDeleteJournalId) {
+        closeDeleteModal();
+        return;
+      }
+
+      const deleteId = pendingDeleteJournalId;
+      closeDeleteModal();
+
+      try {
+        await deleteEntry(deleteId);
+        if (String(editingJournalId) === String(deleteId)) {
+          resetEditor();
         }
+        journalFeedback.textContent = 'Journal entry deleted.';
+        await loadHistory();
+      } catch (err) {
+        journalFeedback.textContent = err.message || 'Failed to delete journal entry.';
       }
     });
 

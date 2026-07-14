@@ -90,6 +90,68 @@
           </table>
         </div>
       </article>
+
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Resources</h2>
+          <p class="role-help-text" style="margin:0;">Add resources that appear on the student resources page.</p>
+        </div>
+        <form id="resource-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
+          <input id="resource-id" type="hidden" />
+          <div class="form-group"><label class="form-label" for="resource-title">Title</label><input id="resource-title" class="form-input" required /></div>
+          <div class="form-group"><label class="form-label" for="resource-category">Category</label><input id="resource-category" class="form-input" /></div>
+          <div class="form-group"><label class="form-label" for="resource-description">Description</label><textarea id="resource-description" class="form-textarea"></textarea></div>
+          <div class="form-group"><label class="form-label" for="resource-content">In-depth information</label><textarea id="resource-content" class="form-textarea" rows="8" placeholder="Add detailed guidance, steps, examples, and when to seek additional support..."></textarea></div>
+          <div class="modal-actions">
+            <button class="btn-primary" type="submit">Save resource</button>
+            <button id="resource-reset" class="btn-ghost-modal" type="button">Clear</button>
+          </div>
+          <p id="resource-msg" class="role-help-text"></p>
+        </form>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Resources table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="resources-body"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="role-panel">
+        <div class="role-panel-head">
+          <h2>Emergency Contacts</h2>
+          <p class="role-help-text" style="margin:0;">Add hotline contacts for one-tap calling from student pages.</p>
+        </div>
+        <form id="contact-form" class="auth-card" style="box-shadow:none; border:none; padding:0; margin-bottom:16px;">
+          <input id="contact-id" type="hidden" />
+          <div class="form-group"><label class="form-label" for="contact-name">Contact name</label><input id="contact-name" class="form-input" required /></div>
+          <div class="form-group"><label class="form-label" for="contact-phone">Phone number</label><input id="contact-phone" class="form-input" type="tel" /></div>
+          <div class="modal-actions">
+            <button class="btn-primary" type="submit">Save contact</button>
+            <button id="contact-reset" class="btn-ghost-modal" type="button">Clear</button>
+          </div>
+          <p id="contact-msg" class="role-help-text"></p>
+        </form>
+        <div class="role-table-wrap">
+          <table class="role-table" aria-label="Emergency contacts table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="contacts-body"></tbody>
+          </table>
+        </div>
+      </article>
     </section>
   </main>
 
@@ -111,7 +173,28 @@
     const staffMsg = document.getElementById('staff-msg');
     const staffBody = document.getElementById('staff-body');
     const toggleStaffPassword = document.getElementById('toggle-staff-password');
+
+    const resourceForm = document.getElementById('resource-form');
+    const resourceIdInput = document.getElementById('resource-id');
+    const resourceTitleInput = document.getElementById('resource-title');
+    const resourceCategoryInput = document.getElementById('resource-category');
+    const resourceDescriptionInput = document.getElementById('resource-description');
+    const resourceContentInput = document.getElementById('resource-content');
+    const resourceResetBtn = document.getElementById('resource-reset');
+    const resourceMsg = document.getElementById('resource-msg');
+    const resourcesBody = document.getElementById('resources-body');
+
+    const contactForm = document.getElementById('contact-form');
+    const contactIdInput = document.getElementById('contact-id');
+    const contactNameInput = document.getElementById('contact-name');
+    const contactPhoneInput = document.getElementById('contact-phone');
+    const contactResetBtn = document.getElementById('contact-reset');
+    const contactMsg = document.getElementById('contact-msg');
+    const contactsBody = document.getElementById('contacts-body');
+
     let editingSignupId = null;
+    let resourceRows = [];
+    let contactRows = [];
 
     function safeText(value) {
       return String(value || '').trim() || '-';
@@ -121,6 +204,22 @@
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return '-';
       return date.toLocaleString();
+    }
+
+    function normalizePhoneForStore(value) {
+      const digits = String(value || '').replace(/\D+/g, '');
+      if (!digits) return '';
+      if (digits.startsWith('254')) return digits.slice(3);
+      return digits;
+    }
+
+    function toDialHref(value) {
+      const digits = normalizePhoneForStore(value);
+      if (!digits) return '#';
+      if (digits === '999' || digits === '112') return `tel:${digits}`;
+      if (digits.length === 9) return `tel:+254${digits}`;
+      if (digits.length === 10 && digits.startsWith('0')) return `tel:+254${digits.slice(1)}`;
+      return `tel:${digits}`;
     }
 
     async function api(url, options) {
@@ -133,6 +232,16 @@
     function setStaffMessage(message, isError) {
       staffMsg.textContent = message || '';
       staffMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function setResourceMessage(message, isError) {
+      resourceMsg.textContent = message || '';
+      resourceMsg.style.color = isError ? '#B42318' : '#146C43';
+    }
+
+    function setContactMessage(message, isError) {
+      contactMsg.textContent = message || '';
+      contactMsg.style.color = isError ? '#B42318' : '#146C43';
     }
 
     function resetStaffForm(options = {}) {
@@ -196,6 +305,74 @@
       });
     }
 
+    function resetResourceForm(keepMessage = false) {
+      resourceIdInput.value = '';
+      resourceTitleInput.value = '';
+      resourceCategoryInput.value = '';
+      resourceDescriptionInput.value = '';
+      resourceContentInput.value = '';
+      if (!keepMessage) setResourceMessage('', false);
+    }
+
+    function resetContactForm(keepMessage = false) {
+      contactIdInput.value = '';
+      contactNameInput.value = '';
+      contactPhoneInput.value = '';
+      if (!keepMessage) setContactMessage('', false);
+    }
+
+    function renderResources(rows) {
+      resourceRows = Array.isArray(rows) ? rows : [];
+      resourcesBody.innerHTML = '';
+
+      if (!resourceRows.length) {
+        resourcesBody.innerHTML = '<tr><td colspan="4">No resources found.</td></tr>';
+        return;
+      }
+
+      resourceRows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.resourceId)}</td>
+          <td>${safeText(row.title)}</td>
+          <td>${safeText(row.category)}</td>
+          <td>
+            <div class="role-inline-actions">
+              <button class="role-mini-btn" type="button" data-resource-edit="${safeText(row.resourceId)}">Edit</button>
+              <button class="role-mini-btn" type="button" data-resource-delete="${safeText(row.resourceId)}">Delete</button>
+            </div>
+          </td>
+        `;
+        resourcesBody.appendChild(tr);
+      });
+    }
+
+    function renderContacts(rows) {
+      contactRows = Array.isArray(rows) ? rows : [];
+      contactsBody.innerHTML = '';
+
+      if (!contactRows.length) {
+        contactsBody.innerHTML = '<tr><td colspan="4">No emergency contacts found.</td></tr>';
+        return;
+      }
+
+      contactRows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${safeText(row.contactId)}</td>
+          <td>${safeText(row.contactName)}</td>
+          <td><a href="${toDialHref(row.phoneNo)}">${safeText(row.phoneNo)}</a></td>
+          <td>
+            <div class="role-inline-actions">
+              <button class="role-mini-btn" type="button" data-contact-edit="${safeText(row.contactId)}">Edit</button>
+              <button class="role-mini-btn" type="button" data-contact-delete="${safeText(row.contactId)}">Delete</button>
+            </div>
+          </td>
+        `;
+        contactsBody.appendChild(tr);
+      });
+    }
+
     async function loadDashboardData() {
       const payload = await api('/api/admin/dashboard-data');
       applyStatsToKpis(payload.stats || null);
@@ -207,8 +384,18 @@
       renderStaffRows(Array.isArray(payload.rows) ? payload.rows : []);
     }
 
+    async function loadResources() {
+      const payload = await api('/api/admin/resources');
+      renderResources(Array.isArray(payload.rows) ? payload.rows : []);
+    }
+
+    async function loadContacts() {
+      const payload = await api('/api/admin/emergency-contacts');
+      renderContacts(Array.isArray(payload.rows) ? payload.rows : []);
+    }
+
     async function refreshAll() {
-      const [dashboard] = await Promise.all([loadDashboardData(), loadStaffAccounts()]);
+      const [dashboard] = await Promise.all([loadDashboardData(), loadStaffAccounts(), loadResources(), loadContacts()]);
       return dashboard;
     }
 
@@ -294,6 +481,116 @@
       resetStaffForm();
       window.history.replaceState({}, '', '/admin.html');
     });
+
+    resourceForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        title: resourceTitleInput.value.trim(),
+        category: resourceCategoryInput.value.trim(),
+        description: resourceDescriptionInput.value.trim(),
+        resourceContent: resourceContentInput.value.trim(),
+      };
+
+      const editId = Number(resourceIdInput.value || 0);
+      const isEdit = Number.isInteger(editId) && editId > 0;
+
+      try {
+        await api(isEdit ? `/api/admin/resources/${encodeURIComponent(String(editId))}` : '/api/admin/resources', {
+          method: isEdit ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setResourceMessage(isEdit ? 'Resource updated successfully.' : 'Resource created successfully.', false);
+        resetResourceForm(true);
+        await loadResources();
+      } catch (err) {
+        setResourceMessage(err.message || 'Failed to save resource.', true);
+      }
+    });
+
+    resourcesBody.addEventListener('click', async (event) => {
+      const editId = Number(event.target.getAttribute('data-resource-edit') || 0);
+      const deleteId = Number(event.target.getAttribute('data-resource-delete') || 0);
+
+      if (editId > 0) {
+        const row = resourceRows.find((item) => Number(item.resourceId) === editId);
+        if (!row) return;
+        resourceIdInput.value = String(row.resourceId || '');
+        resourceTitleInput.value = String(row.title || '');
+        resourceCategoryInput.value = String(row.category || '');
+        resourceDescriptionInput.value = String(row.description || '');
+        resourceContentInput.value = String(row.resourceContent || '');
+        setResourceMessage('Editing resource #' + row.resourceId, false);
+        return;
+      }
+
+      if (deleteId > 0) {
+        try {
+          await api(`/api/admin/resources/${encodeURIComponent(String(deleteId))}`, { method: 'DELETE' });
+          if (Number(resourceIdInput.value || 0) === deleteId) resetResourceForm();
+          setResourceMessage('Resource deleted successfully.', false);
+          await loadResources();
+        } catch (err) {
+          setResourceMessage(err.message || 'Failed to delete resource.', true);
+        }
+      }
+    });
+
+    resourceResetBtn.addEventListener('click', () => resetResourceForm());
+
+    contactForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const payload = {
+        contactName: contactNameInput.value.trim(),
+        phoneNo: normalizePhoneForStore(contactPhoneInput.value),
+      };
+
+      const editId = Number(contactIdInput.value || 0);
+      const isEdit = Number.isInteger(editId) && editId > 0;
+
+      try {
+        await api(isEdit ? `/api/admin/emergency-contacts/${encodeURIComponent(String(editId))}` : '/api/admin/emergency-contacts', {
+          method: isEdit ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        setContactMessage(isEdit ? 'Emergency contact updated successfully.' : 'Emergency contact created successfully.', false);
+        resetContactForm(true);
+        await loadContacts();
+      } catch (err) {
+        setContactMessage(err.message || 'Failed to save emergency contact.', true);
+      }
+    });
+
+    contactsBody.addEventListener('click', async (event) => {
+      const editId = Number(event.target.getAttribute('data-contact-edit') || 0);
+      const deleteId = Number(event.target.getAttribute('data-contact-delete') || 0);
+
+      if (editId > 0) {
+        const row = contactRows.find((item) => Number(item.contactId) === editId);
+        if (!row) return;
+        contactIdInput.value = String(row.contactId || '');
+        contactNameInput.value = String(row.contactName || '');
+        contactPhoneInput.value = String(row.phoneNo || '');
+        setContactMessage('Editing contact #' + row.contactId, false);
+        return;
+      }
+
+      if (deleteId > 0) {
+        try {
+          await api(`/api/admin/emergency-contacts/${encodeURIComponent(String(deleteId))}`, { method: 'DELETE' });
+          if (Number(contactIdInput.value || 0) === deleteId) resetContactForm();
+          setContactMessage('Emergency contact deleted successfully.', false);
+          await loadContacts();
+        } catch (err) {
+          setContactMessage(err.message || 'Failed to delete emergency contact.', true);
+        }
+      }
+    });
+
+    contactResetBtn.addEventListener('click', () => resetContactForm());
 
     logoutBtn.addEventListener('click', () => {
       sessionStorage.removeItem('tuliza_session_token');

@@ -400,6 +400,28 @@ async function ensureAdminOpsSchema(dbPool) {
     WHERE contact_name IS NULL OR conatct_name IS NULL
   `)
 
+  const defaultEmergencyContacts = [
+    { contactName: 'Emergency Services', phoneNo: 999 },
+    { contactName: 'Befrienders Kenya', phoneNo: 722178177 },
+    { contactName: 'Strathmore Counselling', phoneNo: 700000000 },
+  ]
+
+  for (const contact of defaultEmergencyContacts) {
+    await dbPool.query(
+      `
+      INSERT INTO emergency_contact (conatct_name, contact_name, phone_no, student_id)
+      SELECT $1, $1, $2, NULL
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM emergency_contact
+        WHERE LOWER(COALESCE(contact_name, conatct_name, '')) = LOWER($1)
+          AND student_id IS NULL
+      )
+      `,
+      [contact.contactName, contact.phoneNo]
+    )
+  }
+
   await dbPool.query(`
     CREATE TABLE IF NOT EXISTS admin_kpi_overrides(
       override_id INT PRIMARY KEY DEFAULT 1,
@@ -4980,6 +5002,41 @@ function setupAuthRoutes(app, dbPool) {
       })
     } catch (err) {
       console.error('Failed to load emergency contacts:', err.message)
+      return res.status(500).json({ error: 'Failed to load emergency contacts.' })
+    }
+  })
+
+  app.get('/api/emergency-contacts', async (req, res) => {
+    try {
+      await ensureAdminOpsSchema(dbPool)
+
+      const studentId = parsePositiveInt(req.query.studentId)
+      const result = await dbPool.query(
+        `
+        SELECT
+          e.contact_id,
+          COALESCE(e.contact_name, e.conatct_name) AS contact_name,
+          e.phone_no,
+          e.student_id
+        FROM emergency_contact e
+        WHERE e.student_id IS NULL
+           OR ($1::INT IS NOT NULL AND e.student_id = $1)
+        ORDER BY e.student_id NULLS FIRST, e.contact_id ASC
+        `,
+        [studentId]
+      )
+
+      return res.json({
+        ok: true,
+        rows: result.rows.map((row) => ({
+          contactId: Number(row.contact_id),
+          contactName: String(row.contact_name || ''),
+          phoneNo: row.phone_no == null ? '' : String(row.phone_no),
+          studentId: row.student_id == null ? null : Number(row.student_id),
+        })),
+      })
+    } catch (err) {
+      console.error('Failed to load public emergency contacts:', err.message)
       return res.status(500).json({ error: 'Failed to load emergency contacts.' })
     }
   })
