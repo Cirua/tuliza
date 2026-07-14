@@ -48,6 +48,19 @@
 
     <section class="grid" aria-label="Resource list" id="resource-grid"></section>
     <p class="resource-empty-state" id="resource-empty-state" style="display:none;">No resources matched your search. Try another keyword or filter.</p>
+
+    <section class="role-panel" style="margin-top:20px;">
+      <div class="role-panel-head">
+        <h2>Emergency Hotlines</h2>
+        <p class="role-help-text" style="margin:0;">Tap a number to call directly.</p>
+      </div>
+      <div id="resources-emergency-list" class="role-list">
+        <a class="crisis-contact" href="tel:999">
+          <div class="crisis-contact-name">Emergency Services</div>
+          <div class="crisis-contact-num">999</div>
+        </a>
+      </div>
+    </section>
   </main>
 
   <script>
@@ -84,6 +97,23 @@
 
     function escapeAttr(value) {
       return escapeHtml(value).replace(/`/g, '&#96;');
+    }
+
+    function normalizePhoneForDial(value) {
+      const digits = String(value || '').replace(/\D+/g, '');
+      if (!digits) return '';
+      if (digits === '999' || digits === '112') return digits;
+      if (digits.length === 9) return `+254${digits}`;
+      if (digits.length === 10 && digits.startsWith('0')) return `+254${digits.slice(1)}`;
+      return digits;
+    }
+
+    function formatPhoneDisplay(value) {
+      const digits = String(value || '').replace(/\D+/g, '');
+      if (!digits) return '';
+      if (digits === '999' || digits === '112') return digits;
+      if (digits.length === 9) return `0${digits}`;
+      return digits;
     }
 
     function buildResourceCard(resource) {
@@ -137,6 +167,46 @@
       }
     }
 
+    async function loadEmergencyContacts() {
+      const list = document.getElementById('resources-emergency-list');
+      if (!list) return;
+
+      let sessionUser = {};
+      try {
+        sessionUser = JSON.parse(sessionStorage.getItem('tuliza_session_user') || '{}');
+      } catch (_) {
+        sessionUser = {};
+      }
+
+      const studentId = Number(sessionUser.userId || sessionUser.signupId || 0);
+      const query = Number.isInteger(studentId) && studentId > 0
+        ? `?studentId=${encodeURIComponent(String(studentId))}`
+        : '';
+
+      try {
+        const response = await fetch(`/api/emergency-contacts${query}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) return;
+
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        if (!rows.length) return;
+
+        list.innerHTML = rows.map((row) => {
+          const name = escapeHtml(String(row.contactName || 'Emergency contact').trim());
+          const display = escapeHtml(formatPhoneDisplay(row.phoneNo));
+          const dial = normalizePhoneForDial(row.phoneNo);
+          return `
+            <a class="crisis-contact" href="tel:${escapeAttr(dial)}">
+              <div class="crisis-contact-name">${name}</div>
+              <div class="crisis-contact-num">${display || 'Not available'}</div>
+            </a>
+          `;
+        }).join('');
+      } catch (_) {
+        // Keep fallback contact.
+      }
+    }
+
     function applyFilters() {
       const query = normalize(searchInput ? searchInput.value : '');
       let visibleCount = 0;
@@ -176,6 +246,7 @@
 
     (async () => {
       await loadAdminManagedResources();
+      await loadEmergencyContacts();
       applyFilters();
     })();
   </script>

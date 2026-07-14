@@ -739,6 +739,10 @@
       if (results[3] && results[3].status === 'rejected') {
         setMessage(psychNotesMsg, safeText(results[3].reason?.message || 'Could not load notes.'), true);
       }
+
+      setInterval(() => {
+        loadPsychBookedAppointments(resolvedPsychiatristId).catch(() => {});
+      }, 15000);
     })();
   </script>
 

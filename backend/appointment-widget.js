@@ -37,6 +37,12 @@
             <label class="form-label" for="appointmentTime">Preferred time</label>
             <input id="appointmentTime" class="form-input" type="time" step="900" />
           </div>
+          <div class="form-group">
+            <label class="form-label" for="appointmentSlotSelect">Available slots</label>
+            <select id="appointmentSlotSelect" class="form-select" disabled>
+              <option value="">Choose date and therapist to see slots</option>
+            </select>
+          </div>
         </div>
 
         <div class="appointment-legend" aria-label="Slot meaning">
@@ -44,14 +50,25 @@
           <span class="appointment-legend-item"><span class="slot-dot slot-dot-taken"></span>Taken</span>
         </div>
 
-        <div id="appointmentCalendar" class="appointment-calendar" aria-live="polite"></div>
         <p id="appointmentFeedback" class="appointment-feedback" aria-live="polite"></p>
-        <p id="selectedAppointmentSlot" class="appointment-feedback" style="margin-top:4px;"></p>
-        <div id="googleCalendarActions" class="modal-actions" style="margin-top:10px; display:none;"></div>
 
         <div class="modal-actions">
           <button id="confirmAppointmentBtn" class="btn-primary" type="button" disabled>Book Appointment</button>
           <button id="closeAppointmentModal" class="btn-ghost-modal" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="appointmentSuccessModal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="appointmentSuccessTitle">
+      <div class="modal" style="max-width:460px; border-top:5px solid var(--success);">
+        <div class="modal-header">
+          <p class="modal-eyebrow" style="color:var(--success);">Appointment booked</p>
+          <h2 id="appointmentSuccessTitle" class="modal-title">Booking confirmed</h2>
+          <p id="appointmentSuccessBody" class="modal-subtitle">Your appointment has been saved successfully.</p>
+        </div>
+        <div class="modal-actions">
+          <button id="appointmentSuccessClose" class="btn-ghost-modal" type="button">Close</button>
+          <a id="appointmentSuccessGoogle" class="btn-primary" href="https://calendar.google.com/calendar/u/0/r" target="_self" rel="noopener noreferrer">Add to Google Calendar</a>
         </div>
       </div>
     </div>
@@ -66,13 +83,15 @@
   const therapistIdInput = document.getElementById('therapistId');
   const appointmentDateInput = document.getElementById('appointmentDate');
   const appointmentTimeInput = document.getElementById('appointmentTime');
-  const appointmentCalendar = document.getElementById('appointmentCalendar');
+  const appointmentSlotSelect = document.getElementById('appointmentSlotSelect');
   const appointmentFeedback = document.getElementById('appointmentFeedback');
-  const selectedAppointmentSlot = document.getElementById('selectedAppointmentSlot');
-  const googleCalendarActions = document.getElementById('googleCalendarActions');
   const confirmAppointmentBtn = document.getElementById('confirmAppointmentBtn');
+  const appointmentSuccessModal = document.getElementById('appointmentSuccessModal');
+  const appointmentSuccessBody = document.getElementById('appointmentSuccessBody');
+  const appointmentSuccessClose = document.getElementById('appointmentSuccessClose');
+  const appointmentSuccessGoogle = document.getElementById('appointmentSuccessGoogle');
   let resolvedStudentId = null;
-  let availabilityPollId = null;
+  let availabilityRequestId = 0;
   let preferredTherapistType = null;
   let preferredTherapistId = null;
   let selectedAvailabilityId = null;
@@ -161,36 +180,43 @@
     return window;
   }
 
-  function toGoogleDateTime(dateInput) {
+  function toGoogleLocalDateTime(dateInput) {
     const date = new Date(dateInput);
-    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+    if (Number.isNaN(date.getTime())) return '';
+
+    const year = String(date.getFullYear());
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}${month}${day}T${hours}${minutes}${seconds}`;
   }
 
   function buildGoogleCalendarUrl({ startAt, endAt, therapistType, therapistId }) {
     const text = 'Tuliza Therapy Appointment';
     const details = `Therapist type: ${therapistType}, Therapist ID: ${therapistId}`;
-    const dates = `${toGoogleDateTime(startAt)}/${toGoogleDateTime(endAt)}`;
+    const dates = `${toGoogleLocalDateTime(startAt)}/${toGoogleLocalDateTime(endAt)}`;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Nairobi';
     const params = new URLSearchParams({
       action: 'TEMPLATE',
       text,
       details,
       dates,
+      ctz: timeZone,
     });
-    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+    return `https://calendar.google.com/calendar/u/0/r/eventedit?${params.toString()}`;
   }
 
-  function hideGoogleCalendarAction() {
-    googleCalendarActions.style.display = 'none';
-    googleCalendarActions.innerHTML = '';
+  function closeSuccessModal() {
+    appointmentSuccessModal.style.display = 'none';
   }
 
-  function updateSelectedSlotMessage() {
-    if (!selectedAppointmentSlot) return;
-    if (!selectedAvailabilityId) {
-      selectedAppointmentSlot.textContent = '';
-      return;
-    }
-    selectedAppointmentSlot.textContent = `Selected slot: ${selectedSlotLabel}`;
+  function openSuccessModal({ googleUrl, slotStart }) {
+    const formattedStart = new Date(slotStart).toLocaleString();
+    appointmentSuccessBody.textContent = `Booked successfully. Slot starts at ${formattedStart}.`;
+    appointmentSuccessGoogle.href = googleUrl;
+    appointmentSuccessModal.style.display = 'flex';
   }
 
   function updateConfirmButtonState() {
@@ -201,10 +227,9 @@
   function clearSelectedSlot() {
     selectedAvailabilityId = null;
     selectedSlotLabel = '';
-    appointmentCalendar.querySelectorAll('.slot-chip.is-selected').forEach((chip) => {
-      chip.classList.remove('is-selected');
-    });
-    updateSelectedSlotMessage();
+    if (appointmentSlotSelect) {
+      appointmentSlotSelect.value = '';
+    }
     updateConfirmButtonState();
   }
 
@@ -229,22 +254,6 @@
     }
 
     return payload || {};
-  }
-
-  function stopAvailabilityPolling() {
-    if (availabilityPollId) {
-      clearInterval(availabilityPollId);
-      availabilityPollId = null;
-    }
-  }
-
-  function startAvailabilityPolling() {
-    stopAvailabilityPolling();
-    availabilityPollId = setInterval(() => {
-      if (appointmentModal.style.display === 'flex') {
-        loadAvailability();
-      }
-    }, 15000);
   }
 
   function getSessionUser() {
@@ -345,16 +354,69 @@
 
   function closeModal() {
     appointmentModal.style.display = 'none';
-    hideGoogleCalendarAction();
-    stopAvailabilityPolling();
     clearSelectedSlot();
   }
 
+  function renderSlotDropdown(slots) {
+    const selectedTime = appointmentTimeInput.value;
+    const selectedMinutes = hhmmToMinutes(selectedTime);
+    const window = getWorkingWindowByDate(appointmentDateInput.value);
+    const windowStart = window ? hhmmToMinutes(window.min) : null;
+    const windowEnd = window ? hhmmToMinutes(window.max) : null;
+    const now = new Date();
+
+    const filteredSlots = slots
+      .filter((slot) => {
+        if (slot.status !== 'available') return false;
+        const start = new Date(slot.startAt);
+        const end = new Date(slot.endAt);
+        const startMinutes = (start.getHours() * 60) + start.getMinutes();
+        const endMinutes = (end.getHours() * 60) + end.getMinutes();
+        const inWorkingWindow = windowStart == null || windowEnd == null
+          ? true
+          : (startMinutes >= windowStart && endMinutes <= windowEnd);
+        const isUpcoming = end > now;
+        return inWorkingWindow && isUpcoming;
+      })
+      .sort((a, b) => {
+        const aDate = new Date(a.startAt);
+        const bDate = new Date(b.startAt);
+        if (selectedMinutes == null) return aDate - bDate;
+        const aDelta = Math.abs(((aDate.getHours() * 60) + aDate.getMinutes()) - selectedMinutes);
+        const bDelta = Math.abs(((bDate.getHours() * 60) + bDate.getMinutes()) - selectedMinutes);
+        if (aDelta !== bDelta) return aDelta - bDelta;
+        return aDate - bDate;
+      });
+
+    if (!filteredSlots.length) {
+      appointmentSlotSelect.innerHTML = '<option value="">No available slots for this selection</option>';
+      appointmentSlotSelect.disabled = true;
+      clearSelectedSlot();
+      return { available: 0, taken: 0, timeFilter: selectedTime };
+    }
+
+    const options = ['<option value="">Select an available slot</option>'];
+    filteredSlots.forEach((slot) => {
+      const startDate = new Date(slot.startAt);
+      const endDate = new Date(slot.endAt);
+      const label = `${startDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} ${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      options.push(`<option value="${slot.availabilityId}" data-slot-start-at="${slot.startAt}">${label}</option>`);
+    });
+
+    appointmentSlotSelect.innerHTML = options.join('');
+    appointmentSlotSelect.disabled = false;
+    clearSelectedSlot();
+    return { available: filteredSlots.length, taken: 0, timeFilter: selectedTime };
+  }
+
   async function loadAvailability() {
+    const requestId = ++availabilityRequestId;
     const therapistType = therapistTypeInput.value;
     const therapistId = Number(therapistIdInput.value);
     if (!therapistType || !therapistId) {
       appointmentFeedback.textContent = 'Please choose a therapist.';
+      appointmentSlotSelect.innerHTML = '<option value="">Choose a therapist first</option>';
+      appointmentSlotSelect.disabled = true;
       return;
     }
 
@@ -380,7 +442,9 @@
       const minMinutes = hhmmToMinutes(window.min);
       const maxMinutes = hhmmToMinutes(window.max);
       if (correctedCurrentTime > maxMinutes) {
-        appointmentCalendar.innerHTML = '';
+        appointmentSlotSelect.innerHTML = '<option value="">Booking window closed for today</option>';
+        appointmentSlotSelect.disabled = true;
+        clearSelectedSlot();
         appointmentFeedback.textContent = `Booking hours are over for today (${window.label}). Please choose another date.`;
         return;
       }
@@ -391,137 +455,28 @@
     }
 
     appointmentFeedback.textContent = 'Loading therapist availability...';
-    appointmentCalendar.innerHTML = '';
+    appointmentSlotSelect.innerHTML = '<option value="">Loading available slots...</option>';
+    appointmentSlotSelect.disabled = true;
     clearSelectedSlot();
-    hideGoogleCalendarAction();
 
     try {
       const selectedDate = appointmentDateInput.value;
       const datePart = selectedDate ? `&startDate=${encodeURIComponent(selectedDate)}&days=1` : '&days=14';
       const response = await fetch(`/api/appointments/availability?therapistType=${encodeURIComponent(therapistType)}&therapistId=${encodeURIComponent(String(therapistId))}${datePart}`);
       const data = await parseJsonResponse(response, 'Could not load availability.');
-      const summary = renderCalendar(data.slots || []);
+      if (requestId !== availabilityRequestId) return;
+      const summary = renderSlotDropdown(data.slots || []);
       if (summary.available > 0) {
-        appointmentFeedback.textContent = `${summary.available} slot(s) available. Select a slot and click Book Appointment.`;
+        appointmentFeedback.textContent = `${summary.available} slot(s) available. Choose one from the dropdown and click Book Appointment.`;
       } else {
         appointmentFeedback.textContent = 'No available slots for this date. Try another date or therapist.';
       }
     } catch (err) {
+      if (requestId !== availabilityRequestId) return;
+      appointmentSlotSelect.innerHTML = '<option value="">Could not load slots</option>';
+      appointmentSlotSelect.disabled = true;
       appointmentFeedback.textContent = err.message || 'Failed to load availability.';
     }
-  }
-
-  function renderCalendar(slots) {
-    const selectedTime = appointmentTimeInput.value;
-    const selectedMinutes = hhmmToMinutes(selectedTime);
-    const window = getWorkingWindowByDate(appointmentDateInput.value);
-    const windowStart = window ? hhmmToMinutes(window.min) : null;
-    const windowEnd = window ? hhmmToMinutes(window.max) : null;
-    const now = new Date();
-    const filteredSlots = slots.filter((slot) => {
-      const start = new Date(slot.startAt);
-      const end = new Date(slot.endAt);
-      const startMinutes = (start.getHours() * 60) + start.getMinutes();
-      const endMinutes = (end.getHours() * 60) + end.getMinutes();
-      const inWorkingWindow = windowStart == null || windowEnd == null
-        ? true
-        : (startMinutes >= windowStart && endMinutes <= windowEnd);
-      const isUpcoming = end > now;
-      return inWorkingWindow && isUpcoming;
-    });
-
-    if (!filteredSlots.length) {
-      appointmentCalendar.innerHTML = '<p class="appointment-empty">No upcoming slots for this date yet. Ask your therapist to publish availability or choose another date.</p>';
-      return { available: 0, taken: 0, timeFilter: selectedTime };
-    }
-
-    let availableCount = 0;
-    let takenCount = 0;
-
-    const grouped = new Map();
-    filteredSlots.forEach((slot) => {
-      const slotDate = new Date(slot.startAt);
-      const dayKey = slotDate.toISOString().slice(0, 10);
-      if (!grouped.has(dayKey)) grouped.set(dayKey, []);
-      grouped.get(dayKey).push(slot);
-    });
-
-    const dayCards = Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dayKey, daySlots]) => {
-        const dateLabel = new Date(`${dayKey}T00:00:00`).toLocaleDateString(undefined, {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-        });
-
-        const slotButtons = daySlots
-          .sort((a, b) => {
-            const aDate = new Date(a.startAt);
-            const bDate = new Date(b.startAt);
-            if (selectedMinutes == null) return aDate - bDate;
-            const aDelta = Math.abs(((aDate.getHours() * 60) + aDate.getMinutes()) - selectedMinutes);
-            const bDelta = Math.abs(((bDate.getHours() * 60) + bDate.getMinutes()) - selectedMinutes);
-            if (aDelta !== bDelta) return aDelta - bDelta;
-            return aDate - bDate;
-          })
-          .map((slot) => {
-            const startLabel = new Date(slot.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const endLabel = new Date(slot.endAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const unavailable = slot.status !== 'available';
-              if (unavailable) takenCount += 1;
-              else availableCount += 1;
-              const statusLabel = unavailable ? 'Taken' : 'Available';
-            return `
-              <button
-                class="slot-chip ${unavailable ? 'is-unavailable' : 'is-available'}"
-                ${unavailable ? 'disabled' : ''}
-                data-availability-id="${slot.availabilityId}"
-                data-slot-start-at="${slot.startAt}"
-                aria-label="${startLabel} to ${endLabel}, ${statusLabel}"
-              >
-                ${startLabel} - ${endLabel} ${unavailable ? '(Taken)' : '(Available)'}
-              </button>
-            `;
-          })
-          .join('');
-
-        return `
-          <article class="appointment-day-card">
-            <h3>${dateLabel}</h3>
-            <div class="slot-grid">${slotButtons}</div>
-          </article>
-        `;
-      })
-      .join('');
-
-    appointmentCalendar.innerHTML = dayCards;
-    clearSelectedSlot();
-
-    appointmentCalendar.querySelectorAll('.slot-chip.is-available').forEach((button) => {
-      button.addEventListener('click', () => {
-        const availabilityId = Number(button.getAttribute('data-availability-id'));
-        if (!availabilityId) return;
-
-        const slotStartAt = String(button.getAttribute('data-slot-start-at') || '').trim();
-        const slotStartDate = slotStartAt ? new Date(slotStartAt) : null;
-        if (slotStartDate && !Number.isNaN(slotStartDate.getTime())) {
-          appointmentTimeInput.value = `${String(slotStartDate.getHours()).padStart(2, '0')}:${String(slotStartDate.getMinutes()).padStart(2, '0')}`;
-        }
-
-        appointmentCalendar.querySelectorAll('.slot-chip.is-selected').forEach((chip) => {
-          chip.classList.remove('is-selected');
-        });
-
-        button.classList.add('is-selected');
-        selectedAvailabilityId = availabilityId;
-        selectedSlotLabel = String(button.textContent || '').trim();
-        updateSelectedSlotMessage();
-        updateConfirmButtonState();
-      });
-    });
-
-    return { available: availableCount, taken: takenCount, timeFilter: selectedTime };
   }
 
   async function bookSlot() {
@@ -537,7 +492,6 @@
 
     appointmentFeedback.textContent = 'Booking slot...';
     updateConfirmButtonState();
-    hideGoogleCalendarAction();
 
     try {
       const response = await fetch('/api/appointments', {
@@ -555,15 +509,13 @@
 
       await loadAvailability();
       appointmentFeedback.textContent = `Booked successfully. Slot starts at ${new Date(result.slotStart).toLocaleString()}.`;
-      window.alert('Booked appointment successful.');
       const googleUrl = buildGoogleCalendarUrl({
         startAt: result.slotStart,
         endAt: result.slotEnd,
         therapistType,
         therapistId,
       });
-      googleCalendarActions.innerHTML = `<a class="btn-primary" href="${googleUrl}" target="_blank" rel="noopener noreferrer">Add to Google Calendar</a>`;
-      googleCalendarActions.style.display = 'flex';
+      openSuccessModal({ googleUrl, slotStart: result.slotStart });
     } catch (err) {
       const message = String(err.message || 'Could not complete booking.');
       if (message.toLowerCase().includes('already been booked') || message.toLowerCase().includes('no longer available')) {
@@ -572,7 +524,6 @@
       } else {
         appointmentFeedback.textContent = message;
       }
-      hideGoogleCalendarAction();
     }
   }
 
@@ -593,7 +544,6 @@
         await resolveStudentIdFromSession();
         await loadTherapists();
         await loadAvailability();
-        startAvailabilityPolling();
       } catch (err) {
         appointmentFeedback.textContent = err.message || 'Could not prepare booking options.';
       }
@@ -605,11 +555,18 @@
   appointmentModal.addEventListener('click', (event) => {
     if (event.target === appointmentModal) closeModal();
   });
+  appointmentSuccessModal.addEventListener('click', (event) => {
+    if (event.target === appointmentSuccessModal) closeSuccessModal();
+  });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && appointmentModal.style.display === 'flex') {
       closeModal();
     }
+    if (event.key === 'Escape' && appointmentSuccessModal.style.display === 'flex') {
+      closeSuccessModal();
+    }
   });
+  appointmentSuccessClose.addEventListener('click', closeSuccessModal);
 
   therapistTypeInput.addEventListener('change', async () => {
     try {
@@ -622,5 +579,24 @@
   therapistIdInput.addEventListener('change', loadAvailability);
   appointmentDateInput.addEventListener('change', loadAvailability);
   appointmentTimeInput.addEventListener('change', loadAvailability);
+  appointmentSlotSelect.addEventListener('change', () => {
+    const selectedValue = Number(appointmentSlotSelect.value);
+    if (!selectedValue) {
+      clearSelectedSlot();
+      appointmentFeedback.textContent = 'Choose an available slot to continue.';
+      return;
+    }
+
+    const selectedOption = appointmentSlotSelect.options[appointmentSlotSelect.selectedIndex];
+    const slotStartAt = String(selectedOption?.getAttribute('data-slot-start-at') || '').trim();
+    const slotStartDate = slotStartAt ? new Date(slotStartAt) : null;
+    if (slotStartDate && !Number.isNaN(slotStartDate.getTime())) {
+      appointmentTimeInput.value = `${String(slotStartDate.getHours()).padStart(2, '0')}:${String(slotStartDate.getMinutes()).padStart(2, '0')}`;
+    }
+
+    selectedAvailabilityId = selectedValue;
+    selectedSlotLabel = String(selectedOption?.textContent || '').trim();
+    updateConfirmButtonState();
+  });
   confirmAppointmentBtn.addEventListener('click', bookSlot);
 })();
