@@ -303,16 +303,16 @@
     }
 
     async function ensureMentorId(sessionUser) {
-      const direct = resolveSessionMentorId(sessionUser);
-      if (direct) {
-        const response = await fetch(`/api/users/resolve-id?role=mentor&identifier=${encodeURIComponent(String(direct))}`);
+      const email = String(sessionUser?.email || '').trim();
+      if (email) {
+        const response = await fetch(`/api/users/resolve-id?role=mentor&identifier=${encodeURIComponent(email)}`);
         const payload = await response.json().catch(() => ({}));
         if (response.ok && payload.userId) return Number(payload.userId);
       }
 
-      const email = String(sessionUser?.email || '').trim();
-      if (email) {
-        const response = await fetch(`/api/users/resolve-id?role=mentor&identifier=${encodeURIComponent(email)}`);
+      const direct = resolveSessionMentorId(sessionUser);
+      if (direct) {
+        const response = await fetch(`/api/users/resolve-id?role=mentor&identifier=${encodeURIComponent(String(direct))}`);
         const payload = await response.json().catch(() => ({}));
         if (response.ok && payload.userId) return Number(payload.userId);
       }
